@@ -163,7 +163,7 @@ class Robot:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.to_urdf(), encoding="utf-8")
-        logger.info(f"Saved URDF to {path}")
+        logger.info("Saved URDF to %s", path)
 
 
 class URDFGenerator:
@@ -204,18 +204,7 @@ class URDFGenerator:
         return robot
 
     def _get_bounding_box(self) -> tuple[float, float, float] | None:
-        """Get model bounding box."""
-        try:
-            box = self.model.com.Extension.GetBox()
-            if box and len(box) >= 6:
-                return (
-                    float(box[3]) - float(box[0]),
-                    float(box[4]) - float(box[1]),
-                    float(box[5]) - float(box[2]),
-                )
-        except Exception:
-            pass
-        return None
+        return self.model.safe_size()
 
     def _estimate_mass(self, size: tuple[float, float, float] | None) -> float:
         """Estimate mass from bounding box (assuming steel)."""

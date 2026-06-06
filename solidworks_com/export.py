@@ -132,15 +132,15 @@ class ExportManager:
         if isinstance(format, str):
             format = self._resolve_format(format)
 
-        # Generate output path if not provided
-        output_path = self._generate_output_path(format) if output_path is None else Path(output_path)
+        # Generate output path if not provided; resolve to absolute path
+        output_path = self._generate_output_path(format) if output_path is None else Path(output_path).resolve()
 
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Check if file exists and overwrite is disabled
         if output_path.exists() and not kwargs.get('overwrite', False):
-            logger.warning(f"Output file already exists: {output_path}")
+            logger.warning("Output file already exists: %s", output_path)
 
         try:
             # Perform the export
@@ -157,7 +157,7 @@ class ExportManager:
             )
 
         except Exception as e:
-            logger.error(f"Export failed: {e}")
+            logger.error("Export failed: %s", e)
             return ExportResult(
                 success=False,
                 format=format,
@@ -195,17 +195,64 @@ class ExportManager:
         return results
 
     def _do_export(self, format: ExportFormat, output_path: Path, **kwargs: Any) -> None:
-        """Perform the actual export."""
+        """Perform the actual export with format-specific options."""
         try:
             # Activate and clear selection before export
             self.model.activate()
             self.model.clear_selection()
 
-            # Use save_as for all formats (SOLIDWORKS handles the conversion)
-            self.model.save_as(output_path)
+            # Build format-specific export data when possible.
+            export_data = self._build_export_data(format, **kwargs)
+            if export_data is not None:
+                self.model.save_as(output_path, export_data=export_data)
+            else:
+                # Fallback: rely on SOLIDWORKS extension-based format inference.
+                self.model.save_as(output_path)
 
         except Exception as e:
             raise SolidWorksExportError(f"Failed to export to {format.name}: {e}") from e
+
+    def _build_export_data(self, format: ExportFormat, **kwargs: Any) -> Any:
+        """Create a format-specific export-data COM object if available."""
+        from .com import empty_dispatch, import_pywin32
+
+        _, win32com_client = import_pywin32()
+
+        # Map formats to their SOLIDWORKS export-data ProgIDs / creation paths.
+        # These vary by SOLIDWORKS version; we gracefully fall back to None.
+        prog_id_map: dict[ExportFormat, str] = {
+            ExportFormat.STEP: "SldWorks.STEPExportData",
+            ExportFormat.STP: "SldWorks.STEPExportData",
+            ExportFormat.IGES: "SldWorks.IGESExportData",
+            ExportFormat.IGS: "SldWorks.IGESExportData",
+            ExportFormat.STL: "SldWorks.STLExportData",
+            ExportFormat.THREE_MF: "SldWorks._3MFExportData",
+        }
+
+        prog_id = prog_id_map.get(format)
+        if prog_id is None:
+            return empty_dispatch()
+
+        try:
+            data = win32com_client.Dispatch(prog_id)
+        except Exception as e:
+            logger.debug("Failed to create export data object %r: %s", prog_id, e)
+            return empty_dispatch()
+
+        # Apply format-specific settings when the API exposes them.
+        if format in (ExportFormat.STEP, ExportFormat.STP):
+            step_version = kwargs.get("step_version", "AP214")
+            if hasattr(data, "SetProtocol"):
+                data.SetProtocol(step_version)
+        elif format in (ExportFormat.STL,):
+            stl_ascii = kwargs.get("stl_ascii", False)
+            stl_resolution = kwargs.get("stl_resolution", 0.01)
+            if hasattr(data, "SetOption"):
+                data.SetOption(0, not stl_ascii)  # 0 = binary flag (vendor-specific)
+            if hasattr(data, "SetResolution"):
+                data.SetResolution(float(stl_resolution))
+
+        return data
 
     def _resolve_format(self, format_str: str) -> ExportFormat:
         """Resolve a format string to ExportFormat."""
@@ -239,7 +286,8 @@ class ExportManager:
         try:
             title = self.model.title
             return Path(title).stem if title else "model"
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to get model name: %s", e)
             return "model"
 
 

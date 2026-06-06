@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
 
+from .constants import BodyType
+
 logger = logging.getLogger(__name__)
 
 
@@ -288,8 +290,8 @@ class GeometryAnalyzer:
                     (float(box[0]), float(box[1]), float(box[2])),
                     (float(box[3]), float(box[4]), float(box[5])),
                 )
-        except Exception as e:
-            logger.debug(f"Failed to get bounding box: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get bounding box: %s", e)
         return None
 
     def _compute_size(self, bbox: tuple[tuple, tuple]) -> tuple[float, float, float]:
@@ -333,7 +335,8 @@ class GeometryAnalyzer:
         try:
             bodies = self.model.bodies()
             return len(bodies) if bodies else 0
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get body count: %s", e)
             return 0
 
     def _get_solid_count(self) -> int:
@@ -344,10 +347,11 @@ class GeometryAnalyzer:
             count = 0
             for body in bodies:
                 body_type = getattr(body, "GetType", lambda: -1)()
-                if body_type == 0:  # swBodyType_solid
+                if body_type == BodyType.Solid:
                     count += 1
             return count
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get solid count: %s", e)
             return 0
 
     def _get_surface_count(self) -> int:
@@ -358,10 +362,11 @@ class GeometryAnalyzer:
             count = 0
             for body in bodies:
                 body_type = getattr(body, "GetType", lambda: -1)()
-                if body_type == 1:  # swBodyType_sheet
+                if body_type == BodyType.Sheet:
                     count += 1
             return count
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get surface count: %s", e)
             return 0
 
     def _get_volume(self) -> float | None:
@@ -375,8 +380,8 @@ class GeometryAnalyzer:
                 if props and len(props) >= 4:
                     total_volume += float(props[3])
             return total_volume if total_volume > 0 else None
-        except Exception as e:
-            logger.debug(f"Failed to get volume: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get volume: %s", e)
             return None
 
     def _get_surface_area(self) -> float | None:
@@ -390,8 +395,8 @@ class GeometryAnalyzer:
                 if props and len(props) >= 5:
                     total_area += float(props[4])
             return total_area if total_area > 0 else None
-        except Exception as e:
-            logger.debug(f"Failed to get surface area: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get surface area: %s", e)
             return None
 
     def _get_mass_properties(self) -> dict[str, Any] | None:
@@ -421,22 +426,24 @@ class GeometryAnalyzer:
                     "moment_of_inertia": None,  # Would need separate API call
                 }
             return None
-        except Exception as e:
-            logger.debug(f"Failed to get mass properties: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get mass properties: %s", e)
             return None
 
     def _get_feature_count(self) -> int:
         try:
             features = list(self.model.iter_features())
             return len(features)
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get feature count: %s", e)
             return 0
 
     def _get_feature_error_count(self) -> int:
         try:
             errors = self.model.feature_errors()
             return len(errors) if errors else 0
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get feature error count: %s", e)
             return 0
 
 

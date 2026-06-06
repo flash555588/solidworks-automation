@@ -143,7 +143,7 @@ class BenchmarkSuite:
             if run_filter and not run_filter(case):
                 continue
 
-            logger.info(f"Running benchmark: {case.name}")
+            logger.info("Running benchmark: %s", case.name)
             result = self._run_case(case, output_dir)
             results.append(result)
 
@@ -185,15 +185,15 @@ class BenchmarkSuite:
                 # Try to get feature count
                 features = list(model.iter_features())
                 actual_features = len(features)
-            except Exception:
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("operation failed: %s", e)
 
             try:
                 # Try to get body count
                 bodies = model.bodies()
                 actual_body_count = len(bodies) if bodies else 0
-            except Exception:
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("operation failed: %s", e)
 
             try:
                 # Try to get dimensions
@@ -204,8 +204,8 @@ class BenchmarkSuite:
                         float(box[4]) - float(box[1]),
                         float(box[5]) - float(box[2]),
                     )
-            except Exception:
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("operation failed: %s", e)
 
             # Validate
             validation_errors = []
@@ -228,7 +228,7 @@ class BenchmarkSuite:
 
         except Exception as e:
             total_time = time.time() - start_time
-            logger.error(f"Benchmark '{case.name}' failed: {e}")
+            logger.error("Benchmark '%s' failed: %s", case.name, e)
             return BenchmarkResult(
                 case=case,
                 success=False,

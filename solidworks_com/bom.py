@@ -87,36 +87,39 @@ class BOM:
         }
 
     def to_csv(self) -> str:
-        """Generate CSV string."""
-        lines = [
-            ["Item", "Part Number", "Description", "Qty", "Material", "Unit Cost", "Total", "Supplier", "Notes"],
-        ]
+        """Generate CSV string using the standard library csv module."""
+        import csv
+        import io
+
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow([
+            "Item", "Part Number", "Description", "Qty", "Material",
+            "Unit Cost", "Total", "Supplier", "Notes",
+        ])
         for item in self.items:
-            lines.append([
-                str(item.item_number),
+            writer.writerow([
+                item.item_number,
                 item.part_number,
                 item.description,
-                str(item.quantity),
+                item.quantity,
                 item.material,
                 f"${item.unit_cost:.2f}",
                 f"${item.total_cost:.2f}",
                 item.supplier,
                 item.notes,
             ])
-        lines.append(["", "", "", "", "", "", f"${self.total_cost:.2f}", "", ""])
-
-        # Convert to CSV string
-        output = []
-        for line in lines:
-            output.append(",".join(f'"{cell}"' for cell in line))
-        return "\n".join(output)
+        writer.writerow([
+            "", "", "", "", "", "", f"${self.total_cost:.2f}", "", "",
+        ])
+        return output.getvalue()
 
     def save_csv(self, path: str | Path) -> None:
         """Save BOM to CSV file."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.to_csv(), encoding="utf-8")
-        logger.info(f"Saved BOM to {path}")
+        logger.info("Saved BOM to %s", path)
 
     def save_html(self, path: str | Path) -> None:
         """Save BOM to HTML file."""
@@ -176,7 +179,7 @@ class BOM:
 </body>
 </html>"""
         path.write_text(html, encoding="utf-8")
-        logger.info(f"Saved BOM HTML to {path}")
+        logger.info("Saved BOM HTML to %s", path)
 
 
 class BOMGenerator:
@@ -229,7 +232,7 @@ class BOMGenerator:
                             "quantity": 1,
                         })
         except Exception as e:
-            logger.debug(f"Failed to get components: {e}")
+            logger.debug("Failed to get components: %s", e)
 
         # If no components found, add the model itself
         if not components:

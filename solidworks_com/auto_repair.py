@@ -109,7 +109,7 @@ class AutoRepairLoop:
         }
         self._snapshots.append(snapshot)
         self._current_snapshot = snapshot_id
-        logger.debug(f"Snapshot {snapshot_id} taken")
+        logger.debug("Snapshot %d taken", snapshot_id)
         return snapshot_id
 
     def execute_with_repair(
@@ -146,7 +146,7 @@ class AutoRepairLoop:
             return True, report
         except Exception as e:
             initial_error = str(e)
-            logger.warning(f"Operation '{operation_name}' failed: {initial_error}")
+            logger.warning("Operation '%s' failed: %s", operation_name, initial_error)
             report.add_attempt(RepairAttempt(
                 action=RepairAction.RETRY,
                 description="Initial attempt",
@@ -160,7 +160,7 @@ class AutoRepairLoop:
                 if i >= self.max_retries:
                     break
 
-                logger.info(f"Trying fix attempt {i+1}...")
+                logger.info("Trying fix attempt %d...", i + 1)
                 try:
                     fix_success = fix_fn()
                     report.add_attempt(RepairAttempt(
@@ -236,21 +236,26 @@ class AutoRepairLoop:
         return False, report
 
     def _rollback(self) -> None:
-        """Rollback to previous snapshot."""
-        if self._current_snapshot <= 0:
-            raise RuntimeError("No previous snapshot to rollback to")
+        """Rollback to previous snapshot.
 
-        # In a real implementation, this would restore the model state
-        # For now, we just update the snapshot index
-        self._current_snapshot -= 1
-        logger.info(f"Rolled back to snapshot {self._current_snapshot}")
+        .. note::
+            True rollback requires the SOLIDWORKS ``EditUndo2`` API or a
+            ``MoveRollbackBarTo`` call. ``take_snapshot`` only records counts
+            (feature_count, body_count), not actual model state, so restoring
+            from a snapshot is not possible without additional implementation.
+        """
+        raise NotImplementedError(
+            "AutoRepairLoop._rollback is not implemented. "
+            "Use model.com.EditUndo2(n) or IFeatureManager.EditRollback to restore state."
+        )
 
     def _get_feature_count(self) -> int:
         """Get current feature count."""
         try:
             features = list(self.model.iter_features())
             return len(features)
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("_get_feature_count failed: %s", e)
             return 0
 
     def _get_body_count(self) -> int:
@@ -258,7 +263,8 @@ class AutoRepairLoop:
         try:
             bodies = self.model.bodies()
             return len(bodies) if bodies else 0
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("_get_body_count failed: %s", e)
             return 0
 
 
@@ -304,3 +310,6 @@ def execute_with_repair(
         operation,
         fix_attempts=fix_attempts,
     )
+
+
+RepairReportLegacy = RepairReport

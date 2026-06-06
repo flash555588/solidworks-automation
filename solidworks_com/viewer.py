@@ -8,6 +8,7 @@ Inspired by cadskills.xyz's cad-viewer skill:
 
 from __future__ import annotations
 
+import base64
 import logging
 import webbrowser
 from dataclasses import dataclass
@@ -58,6 +59,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             padding: 10px;
             border-radius: 5px;
         }}
+        #dropzone {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #aaa;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+        }}
     </style>
 </head>
 <body>
@@ -65,56 +77,100 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <strong>{filename}</strong><br>
         Drag to rotate | Scroll to zoom | Right-click to pan
     </div>
+    <div id="dropzone" id="dropzone">{drop_hint}</div>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/loaders/STLLoader.js"></script>
     <script>
-        // Simple wireframe viewer
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const scene    = new THREE.Scene();
+        const camera   = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
         const renderer = new THREE.WebGLRenderer({{ antialias: true }});
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Grid
+        // Lights
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(1, 2, 3);
+        scene.add(dirLight);
+
         if ({grid_visible}) {{
-            const grid = new THREE.GridHelper(10, 10, 0x444444, 0x333333);
-            scene.add(grid);
+            scene.add(new THREE.GridHelper(1, 20, 0x444444, 0x333333));
         }}
-
-        // Axes
         if ({axes_visible}) {{
-            const axes = new THREE.AxesHelper(2);
-            scene.add(axes);
+            scene.add(new THREE.AxesHelper(0.1));
         }}
 
-        // Placeholder geometry (wireframe box)
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({{
-            color: 0x00ff88,
-            wireframe: true
-        }});
-        const cube = new THREE.Mesh(geometry, material);
-        scene.add(cube);
-
-        camera.position.z = 3;
-
-        // Controls
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
+        camera.position.set(0.2, 0.15, 0.3);
+        controls.update();
+
+        const material = new THREE.MeshPhongMaterial({{
+            color: 0x4fc3f7,
+            specular: 0x111111,
+            shininess: 60,
+            side: THREE.DoubleSide,
+        }});
+
+        function loadSTLBuffer(buffer) {{
+            const loader   = new THREE.STLLoader();
+            const geometry = loader.parse(buffer);
+            geometry.computeBoundingBox();
+            geometry.computeVertexNormals();
+
+            const box    = geometry.boundingBox;
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            const size   = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+
+            geometry.translate(-center.x, -center.y, -center.z);
+
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+
+            camera.position.set(maxDim * 1.5, maxDim, maxDim * 1.5);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            document.getElementById("dropzone").style.display = "none";
+        }}
+
+        // ----------------------------------------------------------------
+        // Embedded model (base64-encoded binary STL, empty when no model)
+        // ----------------------------------------------------------------
+        const B64_STL = "{b64_stl}";
+        if (B64_STL) {{
+            const binary = atob(B64_STL);
+            const bytes  = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            loadSTLBuffer(bytes.buffer);
+        }}
+
+        // ----------------------------------------------------------------
+        // Drag-and-drop fallback for STL / binary files
+        // ----------------------------------------------------------------
+        document.addEventListener("dragover", e => e.preventDefault());
+        document.addEventListener("drop", e => {{
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => loadSTLBuffer(ev.target.result);
+            reader.readAsArrayBuffer(file);
+        }});
 
         function animate() {{
             requestAnimationFrame(animate);
-            if ({auto_rotate}) {{
-                cube.rotation.x += 0.01;
-                cube.rotation.y += 0.01;
-            }}
             controls.update();
             renderer.render(scene, camera);
         }}
         animate();
 
-        window.addEventListener('resize', () => {{
+        window.addEventListener("resize", () => {{
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -134,15 +190,38 @@ class CADViewer:
         self,
         filename: str = "model",
         *,
+        stl_path: Path | None = None,
         step_path: Path | None = None,
     ) -> str:
-        """Generate HTML for viewer."""
+        """Generate self-contained HTML viewer.
+
+        If *stl_path* is provided and the file exists, its content is
+        embedded as base64 so the HTML works without a local server.
+        If only *step_path* is given, the method looks for a sibling
+        ``<stem>.stl`` file automatically.
+        """
+        # Resolve STL source
+        resolved_stl: Path | None = None
+        if stl_path is not None and Path(stl_path).exists():
+            resolved_stl = Path(stl_path)
+        elif step_path is not None:
+            candidate = Path(step_path).with_suffix(".stl")
+            if candidate.exists():
+                resolved_stl = candidate
+
+        b64 = ""
+        drop_hint = "Drop an STL file here to view it"
+        if resolved_stl is not None:
+            b64 = base64.b64encode(resolved_stl.read_bytes()).decode("ascii")
+            drop_hint = ""
+
         return HTML_TEMPLATE.format(
             filename=filename,
             background_color=self.config.background_color,
             grid_visible=str(self.config.grid_visible).lower(),
             axes_visible=str(self.config.axes_visible).lower(),
-            auto_rotate=str(self.config.auto_rotate).lower(),
+            b64_stl=b64,
+            drop_hint=drop_hint,
         )
 
     def preview(
@@ -178,7 +257,7 @@ class CADViewer:
         if open_browser:
             webbrowser.open(f"file://{html_path.resolve()}")
 
-        logger.info(f"Generated viewer: {html_path}")
+        logger.info("Generated viewer: %s", html_path)
         return html_path
 
 

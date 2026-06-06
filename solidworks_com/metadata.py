@@ -96,7 +96,7 @@ class MetadataManager:
 
         source_path = Path(source_path)
         if not source_path.exists():
-            logger.warning(f"Source file not found: {source_path}")
+            logger.warning("Source file not found: %s", source_path)
             return
 
         self.metadata.source_file = str(source_path)
@@ -143,17 +143,23 @@ class MetadataManager:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(self.metadata.to_json())
 
-        logger.info(f"Saved metadata to {output_path}")
+        logger.info("Saved metadata to %s", output_path)
 
     def load(self, input_path: str | Path) -> None:
         """Load metadata from a JSON file."""
         input_path = Path(input_path)
         if not input_path.exists():
-            logger.warning(f"Metadata file not found: {input_path}")
+            logger.warning("Metadata file not found: %s", input_path)
             return
 
         with open(input_path, encoding='utf-8') as f:
             data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError(f"Invalid metadata format in {input_path}: expected a JSON object")
+        for section in ("source", "generation"):
+            if section in data and not isinstance(data[section], dict):
+                raise ValueError(f"Invalid metadata section '{section}' in {input_path}: expected an object")
 
         # Map dict back to dataclass
         m = self.metadata
@@ -181,8 +187,8 @@ class MetadataManager:
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception as e:
-            logger.debug(f"Failed to compute hash: {e}")
+        except (OSError, ValueError) as e:
+            logger.debug("Failed to compute hash: %s", e)
             return ""
 
     def _count_lines(self, file_path: Path) -> int:
@@ -190,8 +196,8 @@ class MetadataManager:
         try:
             with open(file_path, encoding='utf-8') as f:
                 return sum(1 for _ in f)
-        except Exception as e:
-            logger.debug(f"Failed to count lines: {e}")
+        except (OSError, ValueError) as e:
+            logger.debug("Failed to count lines: %s", e)
             return 0
 
 

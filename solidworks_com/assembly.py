@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,8 @@ from .com import call_member, int_byref
 from .constants import AddComponentConfigOptions, AddMateError, MateAlign, MateType
 from .errors import SolidWorksError
 from .model import ModelDoc
+
+logger = logging.getLogger(__name__)
 
 
 class Component:
@@ -23,7 +26,8 @@ class Component:
     def __repr__(self) -> str:
         try:
             return f"Component(name={self.name!r})"
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("Component.__repr__ failed: %s", e)
             return "Component(<unreadable>)"
 
 
@@ -35,7 +39,8 @@ class AssemblyDoc(ModelDoc):
     def __repr__(self) -> str:
         try:
             return f"AssemblyDoc(title={self.title!r})"
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("AssemblyDoc.__repr__ failed: %s", e)
             return "AssemblyDoc(<unreadable>)"
 
     def add_component(

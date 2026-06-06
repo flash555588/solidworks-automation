@@ -153,28 +153,28 @@ class DrawingParser:
     def parse_image(self, image_path: str | Path) -> ParsedDrawing:
         """Parse an engineering drawing image.
 
-        This method uses image analysis to extract dimensions and features.
-        For best results, use clear engineering drawings with visible dimensions.
+        .. warning::
+            This method is not fully implemented. Image-based drawing
+            parsing requires a vision API and is not yet available.
+            Use :meth:`parse_text_description` for now.
 
         Args:
             image_path: Path to the image file.
 
         Returns:
-            ParsedDrawing with extracted information.
+            ParsedDrawing with basic metadata only.
         """
+        import warnings
         image_path = Path(image_path)
         if not image_path.exists():
             raise FileNotFoundError(f"Image not found: {image_path}")
 
-        # Use MiniMax vision API for image analysis
-        drawing = self._analyze_with_vision(image_path)
-
-        return drawing
-
-    def _analyze_with_vision(self, image_path: Path) -> ParsedDrawing:
-        """Analyze image using vision API."""
-        # This would use the MiniMax vision API
-        # For now, return a placeholder that can be filled by the API
+        warnings.warn(
+            "DrawingParser.parse_image is not fully implemented. "
+            "Only basic metadata is returned. Use parse_text_description instead.",
+            UserWarning,
+            stacklevel=2,
+        )
         return ParsedDrawing(
             title=image_path.stem,
             metadata={"source": str(image_path)},

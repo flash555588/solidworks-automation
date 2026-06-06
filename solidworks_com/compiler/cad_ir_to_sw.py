@@ -36,6 +36,10 @@ contract.
 
 from __future__ import annotations
 
+
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import Any
 
 from ..errors import SolidWorksError  # noqa: F401  (re-exported for callers)
@@ -86,7 +90,8 @@ def _edge_centroid(edge):
         # here; the host can override _edge_centroid if it
         # wants a more accurate computation.
         params = getter()
-    except Exception:
+    except Exception as e:
+        logger.debug("operation failed: %s", e)
         return None
     return None
 
@@ -173,12 +178,12 @@ class CadIrToSw:
                 self.part.clear_selection()
                 self.part.select_object(last_body, mark=0)
                 return 1
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("operation failed: %s", e)
         try:
             self.part.select_matching_sketch_contours(matching="all")
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("operation failed: %s", e)
         return 1
 
     def execute(self, stream: dict) -> None:
@@ -367,11 +372,10 @@ class CadIrToSw:
         try:
             self.part.clear_selection()
             self.part.select_object(feature, mark=0)
-        except (AttributeError, TypeError):
-            # Host does not expose clear_selection / select_object;
-            # leave the existing v0 selection in place and let
+        except (AttributeError, TypeError) as e:
+            logger.debug("Host does not expose clear_selection / select_object: %s", e)
+            # Leave the existing v0 selection in place and let
             # cut_blind work on the active body.
-            pass
 
     def _select_edges(self, kind: str) -> int:
         # v0.2: per-edge selection.  Walk every body in the part,
@@ -384,7 +388,8 @@ class CadIrToSw:
         # is never acceptable.
         try:
             bodies = self.part.bodies()
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError) as e:
+            logger.debug("bodies() failed, falling back to _select_all_edges: %s", e)
             return self._select_all_edges()
         if not bodies:
             return self._select_all_edges()
@@ -402,13 +407,14 @@ class CadIrToSw:
             target_z = zmin
         try:
             self.part.clear_selection()
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("operation failed: %s", e)
         selected = 0
         for body in bodies:
             try:
                 edges = _as_list(call_or_value(lambda: body.GetEdges(0)))
-            except (AttributeError, TypeError):
+            except (AttributeError, TypeError) as e:
+                logger.debug("body.GetEdges failed: %s", e)
                 continue
             for edge in edges:
                 centroid = _edge_centroid(edge)
@@ -423,7 +429,8 @@ class CadIrToSw:
                         edge, append=True, mark=1,
                     )
                     selected += 1
-                except (AttributeError, TypeError):
+                except (AttributeError, TypeError) as e:
+                    logger.debug("select_object(edge) failed, falling back: %s", e)
                     return self._select_all_edges()
         if selected == 0:
             return self._select_all_edges()
@@ -467,7 +474,8 @@ class CadIrToSw:
             return
         try:
             bodies = self.part.bodies()
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError) as e:
+            logger.debug("bodies() failed during boolean_join: %s", e)
             return
         if len(bodies) < 2:
             return
@@ -512,8 +520,8 @@ class CadIrToSw:
             if feature is not None:
                 try:
                     self.part.select_object(feature, append=True, mark=4)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_mirror failed: %s", e)
         self.part.features.mirror_selected(merge=True)
 
     def op_linear_pattern(self, op: dict) -> None:
@@ -522,15 +530,15 @@ class CadIrToSw:
         axis_label = {'X': 'X Axis', 'Y': 'Y Axis', 'Z': 'Z Axis'}.get(direction, direction)
         try:
             self.part.select_by_id(axis_label, 'AXIS', require=False)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_linear_pattern failed: %s", e)
         for fid in op.get('features', []):
             feature = self._feature_by_id.get(str(fid))
             if feature is not None:
                 try:
                     self.part.select_object(feature, append=True, mark=4)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_linear_pattern failed: %s", e)
         count = int(op.get('count', 2))
         spacing = float(op.get('spacing', 0.0))
         self.part.features.linear_pattern_selected(count, spacing, merge=True)
@@ -541,15 +549,15 @@ class CadIrToSw:
         axis_label = {'X': 'X Axis', 'Y': 'Y Axis', 'Z': 'Z Axis'}.get(axis, axis)
         try:
             self.part.select_by_id(axis_label, 'AXIS', require=False)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_circular_pattern failed: %s", e)
         for fid in op.get('features', []):
             feature = self._feature_by_id.get(str(fid))
             if feature is not None:
                 try:
                     self.part.select_object(feature, append=True, mark=4)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_circular_pattern failed: %s", e)
         count = int(op.get('count', 2))
         angle = float(op.get('angle', 360.0))
         self.part.features.circular_pattern_selected(count, angle, merge=True)
@@ -562,8 +570,8 @@ class CadIrToSw:
             for fref in faces:
                 try:
                     self.part.select_by_id(fref, 'FACE', append=True, mark=1, require=False)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_shell failed: %s", e)
         self.part.features.shell_selected(thickness, remove_faces=bool(faces))
 
     def op_draft(self, op: dict) -> None:
@@ -574,14 +582,14 @@ class CadIrToSw:
         plane_label = _PLANE_LABELS.get(direction.lstrip('+-'), 'Top Plane')
         try:
             self.part.select_plane(plane_label)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_draft failed: %s", e)
         if faces:
             for fref in faces:
                 try:
                     self.part.select_by_id(fref, 'FACE', append=True, mark=2, require=False)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_draft failed: %s", e)
         self.part.features.draft_selected(angle)
 
 
@@ -590,8 +598,8 @@ class CadIrToSw:
         expression = op.get('expression', '')
         try:
             self.part.add_equation(name, expression)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_equation failed: %s", e)
 
     def op_generate_bom(self, op: dict) -> None:
         format_type = op.get('format', 'json')
@@ -615,31 +623,31 @@ class CadIrToSw:
         parent = op.get('parent', '')
         try:
             self.part.add_configuration(name, description=description, parent=parent)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_add_configuration failed: %s", e)
 
     def op_set_configuration(self, op: dict) -> None:
         name = op.get('name', '')
         try:
             self.part.set_active_configuration(name)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_set_configuration failed: %s", e)
 
     def op_suppress_feature(self, op: dict) -> None:
         feature = op.get('feature', '')
         configuration = op.get('configuration', '')
         try:
             self.part.suppress_feature_in_config(feature, configuration)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_suppress_feature failed: %s", e)
 
     def op_design_table(self, op: dict) -> None:
         rows = op.get('rows', [])
         columns = op.get('columns', [])
         try:
             self.part.insert_design_table(rows, columns)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_design_table failed: %s", e)
 
     def op_loft_surface(self, op: dict) -> None:
         closed = bool(op.get('closed', False))
@@ -655,8 +663,8 @@ class CadIrToSw:
             if feature is not None:
                 try:
                     self.part.select_object(feature, mark=1)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_thicken failed: %s", e)
         direction = 0 if str(op.get('direction', '+Z')).startswith('+') else 1
         self.part.features.thicken_selected(thickness, direction=direction)
 
@@ -666,8 +674,8 @@ class CadIrToSw:
         for bref in boundary:
             try:
                 self.part.select_by_id(bref, 'EDGE', append=True, mark=1, require=False)
-            except (AttributeError, TypeError):
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("op_fill_surface failed: %s", e)
         self.part.features.fill_surface_selected()
 
     def op_knit(self, op: dict) -> None:
@@ -678,8 +686,8 @@ class CadIrToSw:
             if feature is not None:
                 try:
                     self.part.select_object(feature, append=True, mark=1)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_knit failed: %s", e)
         self.part.features.knit_selected()
 
     def op_sketch_3d_path(self, op: dict) -> None:
@@ -706,8 +714,8 @@ class CadIrToSw:
         if feature is not None:
             try:
                 self.part.select_object(feature, mark=1)
-            except (AttributeError, TypeError):
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("op_sweep_boss failed: %s", e)
         merge = bool(op.get('merge', True))
         self.part.features.sweep_boss(merge=merge)
 
@@ -734,8 +742,8 @@ class CadIrToSw:
                 self.part.select_component_feature(ca, op.get('feature_a', ''), 'FACE')
                 self.part.select_component_feature(cb, op.get('feature_b', ''), 'FACE', append=True)
                 self.part.add_coincident_mate_selected()
-            except (AttributeError, TypeError):
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("op_mate_coincident failed: %s", e)
 
     def op_mate_concentric(self, op: dict) -> None:
         self.part.clear_selection()
@@ -746,8 +754,8 @@ class CadIrToSw:
                 self.part.select_component_feature(ca, op.get('feature_a', ''), 'FACE')
                 self.part.select_component_feature(cb, op.get('feature_b', ''), 'FACE', append=True)
                 self.part.add_concentric_mate_selected()
-            except (AttributeError, TypeError):
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("op_mate_concentric failed: %s", e)
 
     def op_mate_distance(self, op: dict) -> None:
         self.part.clear_selection()
@@ -758,8 +766,8 @@ class CadIrToSw:
                 self.part.select_component_feature(ca, op.get('feature_a', ''), 'FACE')
                 self.part.select_component_feature(cb, op.get('feature_b', ''), 'FACE', append=True)
                 self.part.add_distance_mate_selected(float(op.get('distance', 0.0)))
-            except (AttributeError, TypeError):
-                pass
+            except (AttributeError, TypeError) as e:
+                logger.debug("op_mate_distance failed: %s", e)
 
     def op_new_drawing(self, op: dict) -> None:
         self._doc_name = op.get('name', 'drawing')
@@ -778,8 +786,8 @@ class CadIrToSw:
                 view_type=view_type,
                 x=x, y=y, scale=scale,
             )
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_add_view failed: %s", e)
 
     def op_add_dimension(self, op: dict) -> None:
         entity_a = op.get(entity_a, )
@@ -787,8 +795,8 @@ class CadIrToSw:
         value = float(op.get(value, 0.0))
         try:
             self.part.add_dimension(entity_a, entity_b, value)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_add_dimension failed: %s", e)
     def op_knit(self, op: dict) -> None:
         surfaces = op.get('surfaces', [])
         self.part.clear_selection()
@@ -797,8 +805,8 @@ class CadIrToSw:
             if feature is not None:
                 try:
                     self.part.select_object(feature, append=True, mark=1)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_knit failed: %s", e)
         self.part.features.knit_selected()
 
     def op_draft(self, op: dict) -> None:
@@ -809,14 +817,14 @@ class CadIrToSw:
         plane_label = _PLANE_LABELS.get(direction.lstrip('+-'), 'Top Plane')
         try:
             self.part.select_plane(plane_label)
-        except (AttributeError, TypeError):
-            pass
+        except (AttributeError, TypeError) as e:
+            logger.debug("op_draft failed: %s", e)
         if faces:
             for fref in faces:
                 try:
                     self.part.select_by_id(fref, 'FACE', append=True, mark=2, require=False)
-                except (AttributeError, TypeError):
-                    pass
+                except (AttributeError, TypeError) as e:
+                    logger.debug("op_draft failed: %s", e)
         self.part.features.draft_selected(angle)
 
 

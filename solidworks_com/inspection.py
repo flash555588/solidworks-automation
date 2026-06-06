@@ -175,8 +175,8 @@ class ModelInspector:
                     y_max=float(box[4]),
                     z_max=float(box[5]),
                 )
-        except Exception as e:
-            logger.debug(f"Failed to get bounding box: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to get bounding box: %s", e)
         return None
 
     def get_features(self) -> list[FeatureInfo]:
@@ -192,8 +192,8 @@ class ModelInspector:
                     type_name=type_name,
                     error_code=error_code,
                 ))
-        except Exception as e:
-            logger.debug(f"Failed to enumerate features: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to enumerate features: %s", e)
         return features
 
     def get_body_count(self) -> int:
@@ -201,7 +201,8 @@ class ModelInspector:
         try:
             bodies = self.model.bodies()
             return len(bodies) if bodies else 0
-        except Exception:
+        except (AttributeError, TypeError) as e:
+            logger.debug("get_body_count failed: %s", e)
             return 0
 
     def validate_dimensions(

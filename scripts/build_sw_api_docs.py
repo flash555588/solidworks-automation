@@ -193,10 +193,15 @@ def extract_chm_with_progress(chm_path: Path, out_dir: Path, label: str, sevenzi
 
 def extract_zip_with_progress(zip_path: Path, out_dir: Path, label: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir_resolved = out_dir.resolve()
     with zipfile.ZipFile(zip_path) as zf:
         members = [m for m in zf.infolist() if not m.is_dir()]
         total = len(members)
         for index, member in enumerate(members, start=1):
+            # Guard against zip-slip: ensure extracted path stays inside out_dir
+            dest = (out_dir_resolved / member.filename).resolve()
+            if not str(dest).startswith(str(out_dir_resolved)):
+                raise RuntimeError(f"Zip slip detected in archive {zip_path}: {member.filename!r}")
             zf.extract(member, out_dir)
             if index == total or index % 100 == 0:
                 progress(label, index, total)

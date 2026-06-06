@@ -288,18 +288,7 @@ class ManufacturingChecker:
         ))
 
     def _get_bounding_box(self) -> tuple[float, float, float] | None:
-        """Get model bounding box."""
-        try:
-            box = self.model.com.Extension.GetBox()
-            if box and len(box) >= 6:
-                return (
-                    float(box[3]) - float(box[0]),
-                    float(box[4]) - float(box[1]),
-                    float(box[5]) - float(box[2]),
-                )
-        except Exception:
-            pass
-        return None
+        return self.model.safe_size()
 
     def _get_volume(self) -> float | None:
         """Get model volume."""
@@ -312,8 +301,8 @@ class ManufacturingChecker:
                     if props and len(props) >= 4:
                         total += float(props[3])
                 return total if total > 0 else None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get model volume: %s", e)
         return None
 
 

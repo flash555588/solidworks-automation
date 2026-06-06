@@ -53,7 +53,7 @@ class TestDocumentTypeFromPath:
 
     def test_unknown_suffix_raises(self) -> None:
         with pytest.raises(ValueError, match="Cannot infer"):
-            document_type_from_path(Path("foo.step"))
+            document_type_from_path(Path("foo.xyz"))
 
 
 class TestEnumSanity:
