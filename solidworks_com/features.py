@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from .com import call_member
 from .constants import ChamferOption, ChamferType, EndCondition, RefPlaneConstraint
 from .errors import SolidWorksError
 from .units import deg

@@ -36,13 +36,12 @@ contract.
 
 from __future__ import annotations
 
-
 import logging
-
-logger = logging.getLogger(__name__)
 from typing import Any
 
 from ..errors import SolidWorksError  # noqa: F401  (re-exported for callers)
+
+logger = logging.getLogger(__name__)
 
 def _as_list(value):
     # The COM-bridge returns tuples, lists, or scalar
@@ -89,7 +88,7 @@ def _edge_centroid(edge):
         # the centroid.  We do not need the full tuple shape
         # here; the host can override _edge_centroid if it
         # wants a more accurate computation.
-        params = getter()
+        getter()
     except Exception as e:
         logger.debug("operation failed: %s", e)
         return None
@@ -396,10 +395,9 @@ class CadIrToSw:
         # Resolve the part bbox once; the Z extremum is the
         # target for the top/bottom selector kinds.
         try:
-            xmin, ymin, zmin, xmax, ymax, zmax = self.part.part_box()
+            _, _, zmin, _, _, zmax = self.part.part_box()
         except (AttributeError, TypeError, ValueError):
-            xmin = ymin = zmin = 0.0
-            xmax = ymax = zmax = 0.0
+            zmin = zmax = 0.0
         target_z = None
         if kind == "top_outer_edges":
             target_z = zmax
@@ -412,7 +410,7 @@ class CadIrToSw:
         selected = 0
         for body in bodies:
             try:
-                edges = _as_list(call_or_value(lambda: body.GetEdges(0)))
+                edges = _as_list(call_or_value(lambda body=body: body.GetEdges(0)))
             except (AttributeError, TypeError) as e:
                 logger.debug("body.GetEdges failed: %s", e)
                 continue
@@ -491,10 +489,7 @@ class CadIrToSw:
 
     def op_revolve(self, op: dict) -> None:
         angle = op.get('angle')
-        if angle is None:
-            angle = 360.0
-        else:
-            angle = float(angle)
+        angle = 360.0 if angle is None else float(angle)
         cut = bool(op.get('cut', False))
         reverse = str(op.get('axis', '+Z')).startswith('-')
         feature = self.part.features.revolve(
@@ -797,35 +792,6 @@ class CadIrToSw:
             self.part.add_dimension(entity_a, entity_b, value)
         except (AttributeError, TypeError) as e:
             logger.debug("op_add_dimension failed: %s", e)
-    def op_knit(self, op: dict) -> None:
-        surfaces = op.get('surfaces', [])
-        self.part.clear_selection()
-        for sid in surfaces:
-            feature = self._feature_by_id.get(str(sid))
-            if feature is not None:
-                try:
-                    self.part.select_object(feature, append=True, mark=1)
-                except (AttributeError, TypeError) as e:
-                    logger.debug("op_knit failed: %s", e)
-        self.part.features.knit_selected()
-
-    def op_draft(self, op: dict) -> None:
-        angle = float(op['angle'])
-        faces = op.get('faces', [])
-        self.part.clear_selection()
-        direction = str(op.get('direction', '+Z'))
-        plane_label = _PLANE_LABELS.get(direction.lstrip('+-'), 'Top Plane')
-        try:
-            self.part.select_plane(plane_label)
-        except (AttributeError, TypeError) as e:
-            logger.debug("op_draft failed: %s", e)
-        if faces:
-            for fref in faces:
-                try:
-                    self.part.select_by_id(fref, 'FACE', append=True, mark=2, require=False)
-                except (AttributeError, TypeError) as e:
-                    logger.debug("op_draft failed: %s", e)
-        self.part.features.draft_selected(angle)
 
 
 _OP_HANDLERS = {

@@ -29,26 +29,26 @@ from .constants import (
     bitmask,
     document_type_from_path,
 )
-from .errors import SolidWorksError
-from .geometry import Point, Vector
-from .drawing_doc import DrawingDoc
-from .features import FeatureTools
-from .model import ModelDoc
-from .sketch import SketchContour, SketchEditor, SketchSegment
-from .units import cm, deg, inch, mm
 from .design_rules import (
     DesignChecker,
     DesignProfile,
     RuleSeverity,
     RuleViolation,
-    validate_revolve_profile,
-    validate_extrude_depth,
-    validate_wall_thickness,
-    validate_hole_diameter,
-    validate_fillet_radius,
-    validate_sketch_rectangle,
     validate_circle,
+    validate_extrude_depth,
+    validate_fillet_radius,
+    validate_hole_diameter,
+    validate_revolve_profile,
+    validate_sketch_rectangle,
+    validate_wall_thickness,
 )
+from .drawing_doc import DrawingDoc
+from .errors import SolidWorksError
+from .features import FeatureTools
+from .geometry import Point, Vector
+from .model import ModelDoc
+from .sketch import SketchContour, SketchEditor, SketchSegment
+from .units import cm, deg, inch, mm
 
 if TYPE_CHECKING:
     # Delayed imports for type-checking only to break potential circular refs.
@@ -67,8 +67,10 @@ if TYPE_CHECKING:
         RepairAction,
         RepairAttempt,
         RepairReport,
-        RepairReport as RepairReportLegacy,
         execute_with_repair,
+    )
+    from .auto_repair import (
+        RepairReport as RepairReportLegacy,
     )
     from .benchmark import (
         BenchmarkCase,
@@ -286,6 +288,7 @@ __all__ = [
     "MetadataManager",
     "create_metadata_manager",
     # Model
+    "ModelDoc",
     "SketchContour",
     "SketchEditor",
     "SketchSegment",

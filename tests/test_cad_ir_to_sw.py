@@ -303,7 +303,7 @@ class _CapturingSketchContext:
     buffered sketch entities get replayed on the SketchBuilder.
     """
 
-    def __init__(self, inner: "_SketchContext", sink: list) -> None:
+    def __init__(self, inner: _SketchContext, sink: list) -> None:
         self._inner = inner
         self._sink = sink
 

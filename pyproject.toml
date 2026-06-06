@@ -25,6 +25,9 @@ dependencies = [
 dev = [
     "pytest>=7",
     "ruff>=0.5",
+    "beautifulsoup4>=4.9",
+    "markdownify>=0.11",
+    "lxml>=4.6",
 ]
 docs = [
     "beautifulsoup4>=4.9",
@@ -39,6 +42,7 @@ include = ["solidworks_com*"]
 [tool.ruff]
 line-length = 120
 target-version = "py39"
+extend-exclude = ["models", "skills"]
 
 [tool.ruff.lint]
 # Pragmatic baseline. Many silent excepts exist in com.py for SOLI DWORKS
@@ -58,4 +62,3 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]  # scripts can defer imports until after sys.path tweaks
-

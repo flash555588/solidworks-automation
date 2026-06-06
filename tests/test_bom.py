@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from solidworks_com.bom import BOM, BOMItem, BOMGenerator
+from solidworks_com.bom import BOM, BOMGenerator, BOMItem
 
 
 class TestBOMItem:

@@ -37,6 +37,7 @@ class TestCoreImports:
         assert SketchContour is not None
         assert SketchEditor is not None
         assert SketchSegment is not None
+        assert _as_list((1, 2)) == [1, 2]
 
     def test_import_features(self) -> None:
         from solidworks_com.features import FeatureTools
@@ -70,13 +71,16 @@ class TestCoreImports:
         from solidworks_com.geometry import Point, Vector, flatten_points
 
         assert Point(1, 2, 3).z == 3.0
+        assert Vector(1, 2, 3).x == 1.0
         assert flatten_points([(1, 2)]) == [1.0, 2.0, 0.0]
 
     def test_import_units(self) -> None:
-        from solidworks_com.units import mm, cm, inch, deg
+        from solidworks_com.units import cm, deg, inch, mm
 
         assert mm(1000) == 1.0
         assert cm(100) == 1.0
+        assert inch(1) == 0.0254
+        assert round(deg(180), 5) == 3.14159
 
     def test_import_builders(self) -> None:
         from solidworks_com.builders import PartBuilder
@@ -93,6 +97,10 @@ class TestCoreImports:
         )
 
         assert OutCall(value=1) == OutCall(value=1)
+        assert callable(call_member)
+        assert callable(call_or_value)
+        assert callable(member_value)
+        assert callable(unpack_out_call)
 
     def test_import_extension_modules(self) -> None:
         """Extension modules are lazy-loaded; just verify they resolve."""

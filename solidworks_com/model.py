@@ -11,7 +11,6 @@ from .com import (
     call_member,
     call_or_value,
     empty_dispatch,
-    empty_variant,
     int_byref,
     member_value,
     unpack_out_call,

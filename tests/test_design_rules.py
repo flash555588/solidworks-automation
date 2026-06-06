@@ -19,7 +19,6 @@ from solidworks_com.design_rules import (
 )
 from solidworks_com.units import mm
 
-
 # ---------------------------------------------------------------------------
 # validate_revolve_profile
 # ---------------------------------------------------------------------------

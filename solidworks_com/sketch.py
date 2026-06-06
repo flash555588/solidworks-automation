@@ -4,7 +4,16 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .com import call_member, call_or_value, double_array, empty_variant, import_pywin32, member_value, variant_array, variant_byref
+from .com import (
+    call_member,
+    call_or_value,
+    double_array,
+    empty_variant,
+    import_pywin32,
+    member_value,
+    variant_array,
+    variant_byref,
+)
 from .constants import ConstraintType
 from .errors import SolidWorksError
 from .geometry import Point, flatten_points
