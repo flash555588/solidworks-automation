@@ -14,13 +14,24 @@ from .errors import LLMAuthError, LLMHTTPError, LLMJSONError
 
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
-DEFAULT_API_KEY = "ollama"
+_DEFAULT_API_KEY = "ollama"
+
+import logging as _logging
+_log = _logging.getLogger(__name__)
 
 
 def _resolve_config():
     base_url = os.environ.get("CADPY_AI_LLM_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
     model = os.environ.get("CADPY_AI_LLM_MODEL", DEFAULT_MODEL)
-    api_key = os.environ.get("CADPY_AI_LLM_API_KEY", DEFAULT_API_KEY)
+    api_key = os.environ.get("CADPY_AI_LLM_API_KEY", _DEFAULT_API_KEY)
+    # Warn when a non-localhost URL uses plain HTTP — the API key travels in
+    # the Authorization header and would be exposed in transit.
+    if api_key != _DEFAULT_API_KEY and base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
+        _log.warning(
+            "CADPY_AI_LLM_BASE_URL uses plain HTTP with a non-default API key. "
+            "Switch to HTTPS to avoid credential exposure: %s",
+            base_url,
+        )
     return base_url, model, api_key
 
 

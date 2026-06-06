@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 _pythoncom: Any = None
@@ -15,9 +17,21 @@ def import_pywin32() -> tuple[Any, Any]:
             import pythoncom  # type: ignore
             import win32com.client  # type: ignore
         except ImportError as exc:
-            raise RuntimeError("solidworks-com requires pywin32 on Windows. Install with: pip install pywin32") from exc
-        _pythoncom = pythoncom
-        _win32com_client = win32com.client
+            if sys.platform == "win32":
+                raise RuntimeError("solidworks-com requires pywin32 on Windows. Install with: pip install pywin32") from exc
+            _pythoncom = SimpleNamespace(
+                VT_BYREF=0x4000,
+                VT_I4=3,
+                VT_DISPATCH=9,
+                VT_EMPTY=0,
+                VT_VARIANT=12,
+                VT_ARRAY=0x2000,
+                VT_R8=5,
+            )
+            _win32com_client = SimpleNamespace(VARIANT=lambda variant_type, value: (variant_type, value))
+        else:
+            _pythoncom = pythoncom
+            _win32com_client = win32com.client
     return _pythoncom, _win32com_client
 
 

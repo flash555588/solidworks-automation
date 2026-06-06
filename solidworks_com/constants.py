@@ -146,6 +146,15 @@ class ConstraintType(IntEnum):
     EqualTangent = 62
 
 
+class BodyType(IntEnum):
+    """swBodyType_e -- returned by IBody2::GetType."""
+
+    Solid = 0   # swBodyType_solid
+    Sheet = 1   # swBodyType_sheet
+    Wire = 2    # swBodyType_wire
+    MinimumBody = 3
+
+
 class SketchSegmentType(IntEnum):
     Line = 0
     Arc = 1
@@ -213,6 +222,15 @@ _DOC_TYPES_BY_SUFFIX = {
     ".prt": DocumentType.PART,
     ".asm": DocumentType.ASSEMBLY,
     ".drw": DocumentType.DRAWING,
+    # Importable neutral formats (SOLIDWORKS imports them as parts)
+    ".step": DocumentType.IMPORTED_PART,
+    ".stp": DocumentType.IMPORTED_PART,
+    ".stl": DocumentType.IMPORTED_PART,
+    ".iges": DocumentType.IMPORTED_PART,
+    ".igs": DocumentType.IMPORTED_PART,
+    ".x_t": DocumentType.IMPORTED_PART,
+    ".x_b": DocumentType.IMPORTED_PART,
+    ".sat": DocumentType.IMPORTED_PART,
 }
 
 

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 import unittest
 from pathlib import Path
 
@@ -60,8 +59,9 @@ class CadIrToSwE2ETests(unittest.TestCase):
 
     def test_hex_spacer_pipeline_produces_expected_bbox(self):
         """hex_spacer: sketch_polygon + extrude + chamfer (best-effort)."""
-        from solidworks_com.compiler.cad_ir_to_sw import CadIrToSw
         from cad_ai import ir_validate, sw_compile
+
+        from solidworks_com.compiler.cad_ir_to_sw import CadIrToSw
 
         ir_path = (_REPO / "skills" / "cad_ai" / "examples"
                    / "hex_spacer.ir.json")

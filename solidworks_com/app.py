@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import atexit
 import contextlib
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -17,12 +19,15 @@ from .constants import (
 from .errors import SolidWorksError
 from .model import ModelDoc
 
+logger = logging.getLogger(__name__)
+
 
 class SolidWorks:
     def __init__(self, com: Any) -> None:
         self.com = com
         self._owns_apartment: bool = False
         self._closed: bool = False
+        self._atexit_registered: bool = False
 
     @classmethod
     def connect(
@@ -40,7 +45,8 @@ class SolidWorks:
             if not new_instance:
                 try:
                     app = win32com_client.GetActiveObject(prog_id)
-                except Exception:
+                except Exception as e:
+                    logger.debug("GetActiveObject failed, will start new instance: %s", e)
                     app = None
             if app is None:
                 if not start:
@@ -49,12 +55,29 @@ class SolidWorks:
                 app = dispatch(prog_id)
             if visible is not None:
                 app.Visible = bool(visible)
-        except Exception:
+        except Exception as e:
+            logger.debug("COM initialization failed: %s", e)
             pythoncom.CoUninitialize()
             raise
         instance = cls(app)
         instance._owns_apartment = True
+        # Register atexit cleanup as a safety net in case the user
+        # forgets to call shutdown() or use the context manager.
+        atexit.register(instance._atexit_cleanup)
+        instance._atexit_registered = True
         return instance
+
+    def _atexit_cleanup(self) -> None:
+        """Defensive cleanup registered with atexit."""
+        if not self._closed and self._owns_apartment:
+            with contextlib.suppress(Exception):
+                self.com.ExitApp()
+            self._closed = True
+        if self._owns_apartment:
+            with contextlib.suppress(Exception):
+                pythoncom, _ = import_pywin32()
+                pythoncom.CoUninitialize()
+            self._owns_apartment = False
 
     @property
     def revision_number(self) -> str:
@@ -203,7 +226,8 @@ class SolidWorks:
             return ""
         try:
             return str(getter(int(preference)) or "")
-        except Exception:
+        except Exception as e:
+            logger.debug("GetUserPreferenceStringValue failed for preference %s: %s", int(preference), e)
             return ""
 
     def close(self, title_or_path: str | Path) -> None:
@@ -221,6 +245,13 @@ class SolidWorks:
         keep the SOLIDWORKS process running while still releasing the COM
         apartment (useful when another script owns the application).
         """
+        # Unregister atexit first so the explicit shutdown doesn't fight
+        # with the atexit handler.
+        if self._atexit_registered:
+            with contextlib.suppress(Exception):
+                atexit.unregister(self._atexit_cleanup)
+            self._atexit_registered = False
+
         if exit_app and not self._closed:
             with contextlib.suppress(Exception):
                 self.com.ExitApp()
@@ -240,7 +271,8 @@ class SolidWorks:
     def __repr__(self) -> str:
         try:
             revision = self.revision_number
-        except Exception:
+        except Exception as e:
+            logger.debug("SolidWorks.__repr__ failed: %s", e)
             revision = "?"
         state = "closed" if self._closed else "open"
         return f"SolidWorks(revision={revision!r}, {state})"

@@ -112,7 +112,7 @@ class SnapshotManager:
                 )
 
         except Exception as e:
-            logger.error(f"Snapshot failed: {e}")
+            logger.error("Snapshot failed: %s", e)
             return SnapshotResult(
                 file_path=output,
                 view_angle=view_angle,
@@ -189,8 +189,8 @@ class SnapshotManager:
             # Force view update
             view.ZoomToFit2()
 
-        except Exception as e:
-            logger.debug(f"Failed to set view angle: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to set view angle: %s", e)
 
     def _set_background(self, color: str) -> None:
         """Set the background color."""
@@ -198,27 +198,39 @@ class SnapshotManager:
             # SOLIDWORKS background colors (simplified)
             # This would need proper implementation based on SW API
             pass
-        except Exception as e:
-            logger.debug(f"Failed to set background: {e}")
+        except (AttributeError, TypeError) as e:
+            logger.debug("Failed to set background: %s", e)
 
     def _export_view(self, output_path: Path, width: int, height: int, format: str) -> bool:
-        """Export the current view to a file."""
+        """Export the current view to a file.
+
+        .. warning::
+            This method is a placeholder. Actual image export via the
+            SOLIDWORKS API is not yet implemented.
+        """
+        import warnings
+        warnings.warn(
+            "SnapshotManager._export_view is not fully implemented. "
+            "Snapshots will not be saved to disk.",
+            UserWarning,
+            stacklevel=2,
+        )
         try:
             # Use SOLIDWORKS SaveAs for image export
             # This is a simplified version - actual implementation would use
             # IModelDoc2::SaveAs with appropriate options
-            return True
-        except Exception as e:
-            logger.error(f"Export failed: {e}")
+            return False
+        except (AttributeError, TypeError) as e:
+            logger.error("Export failed: %s", e)
             return False
 
     def _get_model_name(self) -> str:
         """Get the model name for file naming."""
         try:
             title = self.model.title
-            # Remove extension if present
             return Path(title).stem if title else "model"
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to get model name: %s", e)
             return "model"
 
 

@@ -316,3 +316,7 @@ def analyze_error(
     """
     analyzer = RepairAnalyzer()
     return analyzer.analyze(error_message, feature_type=feature_type, context=context)
+
+
+# Backward-compatible alias used by lazy-loading in __init__.py
+RepairReportLegacy = RepairReport

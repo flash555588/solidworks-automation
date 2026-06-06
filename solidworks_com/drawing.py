@@ -154,7 +154,7 @@ class Drawing:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.generate_html(), encoding="utf-8")
-        logger.info(f"Saved drawing HTML to {path}")
+        logger.info("Saved drawing HTML to %s", path)
 
 
 class DrawingGenerator:
@@ -222,18 +222,7 @@ class DrawingGenerator:
         return drawing
 
     def _get_bounding_box(self) -> tuple[float, float, float] | None:
-        """Get model bounding box."""
-        try:
-            box = self.model.com.Extension.GetBox()
-            if box and len(box) >= 6:
-                return (
-                    float(box[3]) - float(box[0]),
-                    float(box[4]) - float(box[1]),
-                    float(box[5]) - float(box[2]),
-                )
-        except Exception:
-            pass
-        return None
+        return self.model.safe_size()
 
 
 def generate_drawing(

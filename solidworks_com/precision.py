@@ -97,7 +97,7 @@ class PrecisionSettings:
     volume_tolerance: float = 0.001     # 0.1%
 
     # Mesh settings
-    mesh: MeshSettings = None
+    mesh: MeshSettings | None = None
 
     # Validation settings
     require_manifold: bool = True
