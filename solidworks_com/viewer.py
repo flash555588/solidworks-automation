@@ -77,7 +77,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <strong>{filename}</strong><br>
         Drag to rotate | Scroll to zoom | Right-click to pan
     </div>
-    <div id="dropzone" id="dropzone">{drop_hint}</div>
+    <div id="dropzone">{drop_hint}</div>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/loaders/STLLoader.js"></script>

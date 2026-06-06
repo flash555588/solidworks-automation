@@ -200,7 +200,7 @@ def extract_zip_with_progress(zip_path: Path, out_dir: Path, label: str) -> None
         for index, member in enumerate(members, start=1):
             # Guard against zip-slip: ensure extracted path stays inside out_dir
             dest = (out_dir_resolved / member.filename).resolve()
-            if not str(dest).startswith(str(out_dir_resolved)):
+            if not dest.is_relative_to(out_dir_resolved):
                 raise RuntimeError(f"Zip slip detected in archive {zip_path}: {member.filename!r}")
             zf.extract(member, out_dir)
             if index == total or index % 100 == 0:

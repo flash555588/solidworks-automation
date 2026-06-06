@@ -219,7 +219,7 @@ class SnapshotManager:
             # Use SOLIDWORKS SaveAs for image export
             # This is a simplified version - actual implementation would use
             # IModelDoc2::SaveAs with appropriate options
-            return True
+            return False
         except (AttributeError, TypeError) as e:
             logger.error("Export failed: %s", e)
             return False

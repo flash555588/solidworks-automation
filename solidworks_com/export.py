@@ -203,11 +203,7 @@ class ExportManager:
 
             # Build format-specific export data when possible.
             export_data = self._build_export_data(format, **kwargs)
-            if export_data is not None:
-                self.model.save_as(output_path, export_data=export_data)
-            else:
-                # Fallback: rely on SOLIDWORKS extension-based format inference.
-                self.model.save_as(output_path)
+            self.model.save_as(output_path, export_data=export_data)
 
         except Exception as e:
             raise SolidWorksExportError(f"Failed to export to {format.name}: {e}") from e

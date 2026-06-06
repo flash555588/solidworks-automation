@@ -775,11 +775,11 @@ class CadIrToSw:
 
     def op_add_view(self, op: dict) -> None:
         from pathlib import Path
-        model_path = Path(op.get(model, ))
-        x = float(op.get(x, 0.0))
-        y = float(op.get(y, 0.0))
-        scale = float(op.get(scale, 1.0))
-        view_type = op.get(view_type, front)
+        model_path = Path(op.get('model_path', ''))
+        x = float(op.get('x', 0.0))
+        y = float(op.get('y', 0.0))
+        scale = float(op.get('scale', 1.0))
+        view_type = op.get('view_type', 'front')
         try:
             self.part.insert_model_view(
                 model_path,
@@ -790,9 +790,9 @@ class CadIrToSw:
             logger.debug("op_add_view failed: %s", e)
 
     def op_add_dimension(self, op: dict) -> None:
-        entity_a = op.get(entity_a, )
-        entity_b = op.get(entity_b, )
-        value = float(op.get(value, 0.0))
+        entity_a = op.get('entity_a', '')
+        entity_b = op.get('entity_b', '')
+        value = float(op.get('value', 0.0))
         try:
             self.part.add_dimension(entity_a, entity_b, value)
         except (AttributeError, TypeError) as e:

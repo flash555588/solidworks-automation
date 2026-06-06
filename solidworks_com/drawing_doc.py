@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-
 import logging
-
-logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
 
 from .errors import SolidWorksError
 from .model import ModelDoc
+
+logger = logging.getLogger(__name__)
 
 
 class DrawingDoc(ModelDoc):
