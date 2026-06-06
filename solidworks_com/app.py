@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 from typing import Any
 
+from .assembly import AssemblyDoc
 from .com import import_pywin32, int_byref, member_value, unpack_out_call
 from .constants import (
     DocumentType,
@@ -13,13 +15,14 @@ from .constants import (
     document_type_from_path,
 )
 from .errors import SolidWorksError
-from .assembly import AssemblyDoc
 from .model import ModelDoc
 
 
 class SolidWorks:
     def __init__(self, com: Any) -> None:
         self.com = com
+        self._owns_apartment: bool = False
+        self._closed: bool = False
 
     @classmethod
     def connect(
@@ -29,23 +32,29 @@ class SolidWorks:
         start: bool = True,
         new_instance: bool = False,
         prog_id: str = "SldWorks.Application",
-    ) -> "SolidWorks":
+    ) -> SolidWorks:
         pythoncom, win32com_client = import_pywin32()
         pythoncom.CoInitialize()
-        app = None
-        if not new_instance:
-            try:
-                app = win32com_client.GetActiveObject(prog_id)
-            except Exception:
-                app = None
-        if app is None:
-            if not start:
-                raise SolidWorksError("SOLIDWORKS is not running")
-            dispatch = win32com_client.DispatchEx if new_instance else win32com_client.Dispatch
-            app = dispatch(prog_id)
-        if visible is not None:
-            app.Visible = bool(visible)
-        return cls(app)
+        try:
+            app = None
+            if not new_instance:
+                try:
+                    app = win32com_client.GetActiveObject(prog_id)
+                except Exception:
+                    app = None
+            if app is None:
+                if not start:
+                    raise SolidWorksError("SOLIDWORKS is not running")
+                dispatch = win32com_client.DispatchEx if new_instance else win32com_client.Dispatch
+                app = dispatch(prog_id)
+            if visible is not None:
+                app.Visible = bool(visible)
+        except Exception:
+            pythoncom.CoUninitialize()
+            raise
+        instance = cls(app)
+        instance._owns_apartment = True
+        return instance
 
     @property
     def revision_number(self) -> str:
@@ -74,8 +83,12 @@ class SolidWorks:
         result = self.com.OpenDoc6(str(path), int(doc_type), int(options), configuration, errors, warnings)
         out = unpack_out_call(result, errors, warnings)
         if out.value is None:
-            raise SolidWorksError(f"Failed to open SOLIDWORKS document: {path}", errors=out.errors, warnings=out.warnings)
-        model = AssemblyDoc(out.value, self) if int(doc_type) == int(DocumentType.ASSEMBLY) else ModelDoc(out.value, self)
+            raise SolidWorksError(
+                f"Failed to open SOLIDWORKS document: {path}", errors=out.errors, warnings=out.warnings
+            )
+        model = (
+            AssemblyDoc(out.value, self) if int(doc_type) == int(DocumentType.ASSEMBLY) else ModelDoc(out.value, self)
+        )
         if activate:
             model.activate()
         return model
@@ -172,16 +185,15 @@ class SolidWorks:
             DocumentType.ASSEMBLY: UserPreferenceStringValue.DefaultTemplateAssembly,
             DocumentType.DRAWING: UserPreferenceStringValue.DefaultTemplateDrawing,
         }[kind]
-
         candidates: list[str] = []
         candidates.extend(_split_paths(os.environ.get(env_var, "")))
-        try:
+        with contextlib.suppress(SolidWorksError):
             candidates.append(self.default_template(kind, paper_size=paper_size, width=width, height=height))
-        except SolidWorksError:
-            pass
         candidates.append(self.user_preference_string(pref))
 
-        template_dirs = _split_paths(self.user_preference_string(UserPreferenceStringValue.FileLocationsDocumentTemplates))
+        template_dirs = _split_paths(
+            self.user_preference_string(UserPreferenceStringValue.FileLocationsDocumentTemplates)
+        )
         candidates.extend(_templates_in_dirs(template_dirs, suffix, preferred_tokens=_preferred_template_tokens(kind)))
         return _existing_or_named(candidates, suffix)
 
@@ -199,6 +211,39 @@ class SolidWorks:
 
     def exit(self) -> None:
         self.com.ExitApp()
+        self._closed = True
+
+    def shutdown(self, *, exit_app: bool = True) -> None:
+        """Tear down the SOLIDWORKS connection cleanly.
+
+        By default, calls ``ExitApp`` on SOLIDWORKS and then uninitialises the
+        COM apartment that ``connect`` initialised. Pass ``exit_app=False`` to
+        keep the SOLIDWORKS process running while still releasing the COM
+        apartment (useful when another script owns the application).
+        """
+        if exit_app and not self._closed:
+            with contextlib.suppress(Exception):
+                self.com.ExitApp()
+            self._closed = True
+        if self._owns_apartment:
+            with contextlib.suppress(Exception):
+                pythoncom, _ = import_pywin32()
+                pythoncom.CoUninitialize()
+            self._owns_apartment = False
+
+    def __enter__(self) -> SolidWorks:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.shutdown()
+
+    def __repr__(self) -> str:
+        try:
+            revision = self.revision_number
+        except Exception:
+            revision = "?"
+        state = "closed" if self._closed else "open"
+        return f"SolidWorks(revision={revision!r}, {state})"
 
 
 def connect(**kwargs: Any) -> SolidWorks:
@@ -220,9 +265,20 @@ def _templates_in_dirs(directories: list[str], suffix: str, *, preferred_tokens:
         path = Path(directory)
         if not path.exists() or not path.is_dir():
             continue
-        matches.extend(path.glob(f"*{suffix}"))
-    preferred = [p for p in matches if any(token in p.name.lower() for token in preferred_tokens)]
-    others = [p for p in matches if p not in preferred]
+        # Search in directory and subdirectories (like MBD)
+        matches.extend(path.rglob(f"*{suffix}"))
+        # Also search with uppercase suffix
+        matches.extend(path.rglob(f"*{suffix.upper()}"))
+    # Deduplicate
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for m in matches:
+        key = str(m).lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(m)
+    preferred = [p for p in unique if any(token in p.name.lower() for token in preferred_tokens)]
+    others = [p for p in unique if p not in preferred]
     return [str(p) for p in sorted(preferred) + sorted(others)]
 
 

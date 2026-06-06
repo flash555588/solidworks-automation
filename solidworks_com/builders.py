@@ -18,24 +18,24 @@ class PartBuilder:
         self.part = part
 
     @classmethod
-    def new(cls, sw: SolidWorks) -> "PartBuilder":
+    def new(cls, sw: SolidWorks) -> PartBuilder:
         return cls(sw.new_part())
 
-    def box(self, width: float, depth: float, height: float, *, plane: str = "Top Plane") -> "PartBuilder":
+    def box(self, width: float, depth: float, height: float, *, plane: str = "Top Plane") -> PartBuilder:
         self.part.select_plane(plane)
         with self.part.sketch() as sk:
             sk.center_rectangle(0.0, 0.0, width / 2.0, depth / 2.0)
         self.part.features.extrude_blind(height)
         return self
 
-    def cylinder(self, radius: float, height: float, *, plane: str = "Top Plane") -> "PartBuilder":
+    def cylinder(self, radius: float, height: float, *, plane: str = "Top Plane") -> PartBuilder:
         self.part.select_plane(plane)
         with self.part.sketch() as sk:
             sk.circle(0.0, 0.0, radius)
         self.part.features.extrude_blind(height)
         return self
 
-    def save_as(self, path: str | Path) -> "PartBuilder":
+    def save_as(self, path: str | Path) -> PartBuilder:
         self.part.save_as(path)
         return self
 

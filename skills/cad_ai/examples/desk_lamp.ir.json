@@ -1,0 +1,87 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "desk_lamp"
+  },
+  "coordinate_system": {
+    "origin": "part_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "base_radius": 60.0,
+    "base_height": 12.0,
+    "base_fillet": 3.0,
+    "stem_radius": 5.0,
+    "stem_height": 200.0,
+    "arm_radius": 4.0,
+    "arm_length": 120.0,
+    "shade_radius": 35.0,
+    "shade_height": 60.0,
+    "arm_shade_z": 320.0
+  },
+  "features": [
+    {
+      "id": "base",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "base_radius"}
+        ]
+      },
+      "depth": "base_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "base_edge_fillet",
+      "type": "fillet",
+      "target": "base",
+      "radius": "base_fillet",
+      "selector": {"kind": "top_outer_edges"}
+    },
+    {
+      "id": "stem",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "stem_radius"}
+        ]
+      },
+      "depth": "stem_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "arm_joint",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["stem_height", 0], "diameter": "arm_radius"}
+        ]
+      },
+      "depth": "arm_length",
+      "direction": "+Z"
+    },
+    {
+      "id": "shade",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["arm_shade_z", 0], "diameter": "shade_radius"}
+        ]
+      },
+      "depth": "shade_height",
+      "direction": "+Z"
+    }
+  ],
+  "acceptance": {
+    "bbox": [70, 70, 320],
+    "must_have": ["single_solid", "base", "stem", "arm", "shade"],
+    "tolerance_mm": 0.5
+  }
+}

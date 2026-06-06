@@ -9,41 +9,60 @@ import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 
+DEFAULT_API_DIR = Path(
+    os.environ.get(
+        "SOLIDWORKS_API_DIR",
+        r"C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api",
+    )
+)
 
-DEFAULT_API_DIR = Path(r"D:\Program Files\SOLIDWORKS Corp\SOLIDWORKS (2)\api")
-
-DOCSETS = {
+DOCSETS: dict[str, dict[str, Any]] = {
     "sldworksapi": {
         "kind": "cab",
-        "cab": DEFAULT_API_DIR / "HelpViewer" / "sldworksapi" / "apihelpviewer.cab",
         "description": "Core SOLIDWORKS COM API interfaces, methods, properties, and events.",
+        "cab": ["HelpViewer", "sldworksapi", "apihelpviewer.cab"],
     },
     "swconst": {
         "kind": "cab",
-        "cab": DEFAULT_API_DIR / "HelpViewer" / "swconst" / "apienumshelpviewer.cab",
         "description": "SOLIDWORKS API constants and enumerations.",
+        "cab": ["HelpViewer", "swconst", "apienumshelpviewer.cab"],
     },
     "swdocmgrapi": {
         "kind": "chm",
-        "chm": DEFAULT_API_DIR / "swdocmgrapi.chm",
         "description": "SOLIDWORKS Document Manager API.",
+        "chm": ["swdocmgrapi.chm"],
     },
     "swcommands": {
         "kind": "chm",
-        "chm": DEFAULT_API_DIR / "swcommands.chm",
         "description": "SOLIDWORKS command IDs.",
+        "chm": ["swcommands.chm"],
     },
     "sldworksapiprogguide": {
         "kind": "chm",
-        "chm": DEFAULT_API_DIR / "sldworksapiprogguide.chm",
         "description": "SOLIDWORKS API programming guide.",
+        "chm": ["sldworksapiprogguide.chm"],
     },
 }
+
+
+def resolve_docset_paths(api_dir: Path) -> dict[str, dict[str, Any]]:
+    """Materialise every docset source path relative to ``api_dir``."""
+    resolved: dict[str, dict[str, Any]] = {}
+    for name, config in DOCSETS.items():
+        entry = dict(config)
+        for key in ("cab", "chm"):
+            parts = entry.get(key)
+            if parts is not None:
+                entry[key] = api_dir.joinpath(*parts)
+        resolved[name] = entry
+    return resolved
+
 
 REMOVE_SELECTORS = [
     "script",
@@ -326,6 +345,14 @@ def write_index(pages: list[Page], output_root: Path) -> None:
 
 
 def build(args: argparse.Namespace) -> None:
+    api_dir = args.api_dir
+    if not api_dir.exists():
+        print(
+            f"warning: SOLIDWORKS API directory not found: {api_dir}\n"
+            f"         Pass --api-dir or set the SOLIDWORKS_API_DIR environment variable to point to the folder that contains 'HelpViewer/' and the .chm files.",
+            file=sys.stderr,
+        )
+    resolved = resolve_docset_paths(api_dir)
     build_root = args.build_dir
     html_root = build_root / "html"
     payload_root = build_root / "payload"
@@ -338,7 +365,7 @@ def build(args: argparse.Namespace) -> None:
     for docset in args.docsets:
         doc_html_dir = html_root / docset
         print(f"\n== {docset} ==")
-        config = DOCSETS[docset]
+        config = resolved[docset]
         if config["kind"] == "cab":
             source_cab = config["cab"]
             if not source_cab.exists():
@@ -370,6 +397,12 @@ def build(args: argparse.Namespace) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build Markdown docs from local SOLIDWORKS API HelpViewer packages.")
+    parser.add_argument(
+        "--api-dir",
+        type=Path,
+        default=DEFAULT_API_DIR,
+        help="Folder containing the SOLIDWORKS API HelpViewer payload and .chm files. Defaults to $SOLIDWORKS_API_DIR or the standard install path.",
+    )
     parser.add_argument("--output", type=Path, default=Path("docs"))
     parser.add_argument("--build-dir", type=Path, default=Path("build") / "sw_api_docs")
     parser.add_argument("--sevenzip", type=Path, default=None, help="Path to 7z.exe for extracting CHM files.")
@@ -379,7 +412,9 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(DOCSETS),
         default=["sldworksapi", "swconst", "swdocmgrapi", "swcommands", "sldworksapiprogguide"],
     )
-    parser.add_argument("--clean", action="store_true", help="Remove previous extracted files and docs before building.")
+    parser.add_argument(
+        "--clean", action="store_true", help="Remove previous extracted files and docs before building."
+    )
     return parser.parse_args()
 
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
+import re
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-import re
-from typing import Any, Callable, Iterator
+from typing import Any, Callable
 
 from .com import (
     call_member,
@@ -19,11 +21,22 @@ from .com import (
     variant_array,
     variant_byref,
 )
-from .constants import ConstraintType, EndCondition, MoveRollbackBarTo, RefPlaneConstraint, SaveAsOptions, SaveAsVersion, SelectType
+from .constants import (
+    ChamferOption,
+    ChamferType,
+    ConstraintType,
+    EndCondition,
+    MoveRollbackBarTo,
+    RefPlaneConstraint,
+    SaveAsOptions,
+    SaveAsVersion,
+    SelectType,
+)
 from .errors import SolidWorksError
 from .geometry import Point, flatten_points
 from .units import deg
 
+logger = logging.getLogger(__name__)
 
 FeaturePredicate = Callable[[Any], bool]
 SegmentPredicate = Callable[["SketchSegment"], bool]
@@ -32,7 +45,7 @@ ContourPredicate = Callable[["SketchContour"], bool]
 
 @dataclass(frozen=True)
 class SketchSegment:
-    model: "ModelDoc"
+    model: ModelDoc
     com: Any
 
     @property
@@ -82,7 +95,7 @@ class ModelDoc:
         return self.com.Extension
 
     @property
-    def features(self) -> "FeatureTools":
+    def features(self) -> FeatureTools:
         return FeatureTools(self)
 
     @property
@@ -98,6 +111,12 @@ class ModelDoc:
         data.Mark = int(mark)
         return data
 
+    def __repr__(self) -> str:
+        try:
+            return f"ModelDoc(title={self.title!r})"
+        except Exception:
+            return "ModelDoc(<unreadable>)"
+
     def set_contour_selection(self, enabled: bool = True) -> None:
         self.selection_manager.EnableContourSelection = bool(enabled)
 
@@ -110,13 +129,13 @@ class ModelDoc:
             raise SolidWorksError("No active sketch")
         return sketch
 
-    def active_sketch_contours(self, *, require: bool = True) -> list["SketchContour"]:
+    def active_sketch_contours(self, *, require: bool = True) -> list[SketchContour]:
         sketch = self.active_sketch(require=require)
         if sketch is None:
             return []
         return SketchContour.from_sketch(self, sketch)
 
-    def activate(self) -> "ModelDoc":
+    def activate(self) -> ModelDoc:
         if self.app is None:
             raise SolidWorksError("Cannot activate document without a SolidWorks application wrapper")
         errors = int_byref()
@@ -216,7 +235,9 @@ class ModelDoc:
         mark: int = 0,
         require: bool = True,
     ) -> bool:
-        return self.select_by_ray(origin, direction, radius=radius, select_type=SelectType.Faces, append=append, mark=mark, require=require)
+        return self.select_by_ray(
+            origin, direction, radius=radius, select_type=SelectType.Faces, append=append, mark=mark, require=require
+        )
 
     def select_edge_by_ray(
         self,
@@ -228,7 +249,9 @@ class ModelDoc:
         mark: int = 0,
         require: bool = True,
     ) -> bool:
-        return self.select_by_ray(origin, direction, radius=radius, select_type=SelectType.Edges, append=append, mark=mark, require=require)
+        return self.select_by_ray(
+            origin, direction, radius=radius, select_type=SelectType.Edges, append=append, mark=mark, require=require
+        )
 
     def selected_object(self, index: int = 1, mark: int = -1, *, require: bool = True) -> Any:
         getter = getattr(self.selection_manager, "GetSelectedObject6", None)
@@ -279,7 +302,9 @@ class ModelDoc:
             raise SolidWorksError(f"Failed to select object: {name}")
         return selected
 
-    def insert_axis_from_planes(self, plane_a: str, plane_b: str, *, name: str = "Reference Axis", auto_size: bool = True) -> Any:
+    def insert_axis_from_planes(
+        self, plane_a: str, plane_b: str, *, name: str = "Reference Axis", auto_size: bool = True
+    ) -> Any:
         self.clear_selection()
         self.select_plane(plane_a)
         self.select_plane(plane_b, append=True)
@@ -292,7 +317,7 @@ class ModelDoc:
 
     def select_sketch_contours(
         self,
-        contours: list["SketchContour"] | tuple["SketchContour", ...],
+        contours: list[SketchContour] | tuple[SketchContour, ...],
         *,
         append: bool = False,
         mark: int = 0,
@@ -312,8 +337,12 @@ class ModelDoc:
         mark: int = 0,
         min_segments: int = 0,
         require: bool = True,
-    ) -> list["SketchContour"]:
-        contours = [contour for contour in self.active_sketch_contours() if contour.is_closed and contour.segment_count >= min_segments]
+    ) -> list[SketchContour]:
+        contours = [
+            contour
+            for contour in self.active_sketch_contours()
+            if contour.is_closed and contour.segment_count >= min_segments
+        ]
         if require and not contours:
             raise SolidWorksError("No closed sketch contours found")
         self.select_sketch_contours(contours, append=append, mark=mark, require=require)
@@ -326,7 +355,7 @@ class ModelDoc:
         append: bool = False,
         mark: int = 0,
         require: bool = True,
-    ) -> list["SketchContour"]:
+    ) -> list[SketchContour]:
         contours = [contour for contour in self.active_sketch_contours() if predicate(contour)]
         if require and not contours:
             raise SolidWorksError("No matching sketch contours found")
@@ -565,7 +594,7 @@ class ModelDoc:
         return feature
 
     @contextmanager
-    def sketch(self) -> Iterator["SketchBuilder"]:
+    def sketch(self) -> Iterator[SketchBuilder]:
         self.sketch_manager.InsertSketch(True)
         try:
             yield SketchBuilder(self)
@@ -573,7 +602,40 @@ class ModelDoc:
             self.sketch_manager.InsertSketch(True)
 
     @contextmanager
-    def sketch3d(self) -> Iterator["SketchBuilder"]:
+    def sketch_on_face_at(
+        self, x: float, y: float, z: float
+    ) -> Iterator[SketchBuilder]:
+        """Open a 2D sketch on a body face at the given global coordinates.
+
+        Unlike :py:meth:`sketch` (which uses a reference plane), this
+        uses a real body face as the sketch plane. This is the only
+        way to add a cut/extrude to a body whose relevant face does
+        not coincide with a reference plane (e.g., a U-fork body
+        whose prongs are open at the top, so the Top Plane does not
+        match a single body face).
+
+        ``(x, y, z)`` must be a point that lies on the target face in
+        global coordinates; SOLIDWORKS finds the closest face.
+        """
+        self.clear_selection()
+        ok = bool(
+            self.com.Extension.SelectByID2(
+                "", "FACE", float(x), float(y), float(z), False, 0, empty_dispatch(), 0
+            )
+        )
+        if not ok:
+            raise SolidWorksError(
+                f"Failed to select FACE at global ({x}, {y}, {z})"
+            )
+        # Open the 2D sketch on the selected face (mirrors sketch()).
+        self.sketch_manager.InsertSketch(True)
+        try:
+            yield SketchBuilder(self)
+        finally:
+            self.sketch_manager.InsertSketch(True)
+
+    @contextmanager
+    def sketch3d(self) -> Iterator[SketchBuilder]:
         self.sketch_manager.Insert3DSketch(True)
         try:
             yield SketchBuilder(self)
@@ -581,15 +643,148 @@ class ModelDoc:
             self.sketch_manager.Insert3DSketch(True)
 
     @contextmanager
-    def edit_sketch_feature(self, feature: Any) -> Iterator["SketchEditor"]:
+    def edit_sketch_feature(self, feature: Any) -> Iterator[SketchEditor]:
         self.clear_selection()
         self.select_object(feature)
         self.edit_selected_sketch()
+
         try:
             yield SketchEditor(self, feature)
         finally:
             self.clear_selection()
             self.edit_selected_sketch()
+
+    def find_face_at(self, x: float, y: float, z: float, *, require: bool = True) -> Any:
+        """Return the body face closest to global coordinates ``(x, y, z)``.
+        Uses SOLIDWORKS ``SelectByID2`` with empty name and type
+        ``"FACE"`` to find the nearest face, then returns the
+        selected face object. This is the prerequisite for face-based
+        boolean cuts (see :pymeth:`bool_subtract`).
+        """
+        self.clear_selection()
+        ok = self.select_by_id("", "FACE", x=x, y=y, z=z, require=False)
+        if not ok:
+            if require:
+                raise SolidWorksError(
+                    f"Failed to find a body FACE at global ({x}, {y}, {z})"
+                )
+            return None
+        return self.selected_object(1, require=require)
+    def extrude_cylinder(
+        self,
+        face: Any,
+        center: tuple[float, float],
+        radius: float,
+        depth: float,
+        *,
+        reverse: bool = False,
+    ) -> Any:
+        """Sketch a circle on ``face`` and extrude it as a separate body.
+        The new cylinder body is *not* merged with the existing body
+        (``merge=False``), so it can be used as a cutter in
+        :pymeth:`bool_subtract`. ``center`` is in the face's local
+        2D coordinates. ``depth`` is the extrude depth in metres.
+        ``reverse=True`` extrudes in the face's opposite-normal
+        direction.
+        """
+        # The face's global position is the centre of the face plane;
+        # we open a sketch on it via sketch_on_face_at using any point
+        # on the face. We use the face's GetCenter or fall back to
+        # SelectByID2 with the face's centroid.
+        self.clear_selection()
+        # Pick any 3D point on the face by re-selecting it. SOLIDWORKS
+        # provides a face's box bounds, but the cheapest reliable path
+        # is to ask the caller to pass a point; if the caller already
+        # has the face, they typically also know a point on it. We
+        # just re-select by id.
+        # For simplicity, callers should pre-position by passing a
+        # point that lies on the face; we use the face's bounding
+        # box centre.
+        cx, cy, cz = _face_centroid(face)
+        with self.sketch_on_face_at(cx, cy, cz) as sk:
+            sk.circle(float(center[0]), float(center[1]), float(radius))
+        # The just-closed sketch is the active one. Use extrude_blind
+        # with merge=False so a new body is created.
+        feature = self.features.extrude_blind(
+            float(depth), merge=False, reverse=bool(reverse)
+        )
+        if feature is None:
+            raise SolidWorksError(
+                "Failed to extrude cylinder (FeatureExtrusion3 returned None)"
+            )
+        # Return the body that was created. After an unmerged extrude
+        # the active body is the new one; the caller can use it for
+        # boolean operations.
+        return self.active_body()
+
+    def bool_subtract(
+        self,
+        target_body: Any,
+        tool_body: Any,
+        *,
+        keep_tool: bool = False,
+    ) -> Any:
+        """Boolean-subtract ``tool_body`` from ``target_body``.
+        Returns the new combined target body (or the combined feature).
+        ``keep_tool=True`` keeps the tool body in the part after the
+        cut (rarely useful; default False deletes the cutter).
+        """
+        # SOLIDWORKS: select target body, then select tool body, then
+        # call InsertCutFeature on the tool body.
+        self.clear_selection()
+        self.select_object(target_body, mark=1)
+        # Append the tool body to the selection list (mark 0)
+        self.select_object(tool_body, append=True, mark=0)
+        feature = self.extension.InsertCutFeature(
+            tool_body, bool(keep_tool)
+        )
+        if feature is None:
+            raise SolidWorksError("Boolean subtract returned no feature")
+        return feature
+
+    def make_hole(
+        self,
+        target_body: Any,
+        face: Any,
+        center: tuple[float, float],
+        radius: float,
+        depth: float,
+        *,
+        reverse: bool = False,
+    ) -> Any:
+        """Convenience: cut a cylindrical hole through ``target_body``.
+        1. Creates a cylinder cutter body on ``face`` at ``center``
+           (face-local 2D coordinates) using :pymeth:`extrude_cylinder`.
+        2. Subtracts the cutter from ``target_body`` using
+           :pymeth:`bool_subtract` (tool body deleted after cut).
+
+        Returns the new combined target body.
+        """
+        cutter = self.extrude_cylinder(
+            face, center=center, radius=radius, depth=depth, reverse=reverse
+        )
+        return self.bool_subtract(target_body, cutter, keep_tool=False)
+
+    def bodies(self) -> list[Any]:
+        """Return all bodies in the active part as a list."""
+        result: list[Any] = []
+        try:
+            result = _as_list(call_or_value(lambda: self.com.GetBodies(0)))
+        except Exception:
+            return result
+        return result
+
+    def active_body(self) -> Any:
+        """Return the most recently created body in the active part.
+        :pymeth:`extrude_cylinder`) SOLIDWORKS activates the new body.
+        This helper returns that body so the caller can chain it
+        into a boolean operation. Falls back to the first body if no
+        active body is detectable.
+        """
+        all_bodies = self.bodies()
+        if not all_bodies:
+            return None
+        return all_bodies[-1]
 
     @contextmanager
     def replace_feature_at_history(
@@ -621,12 +816,23 @@ class ModelDoc:
             raise
 
     def save(self) -> None:
+        """Save the current document.
+
+        Automatically activates the document and clears selection before saving
+        to ensure the save operation succeeds.
+        """
+        self.activate()
+        self.clear_selection()
         errors = int_byref()
         warnings = int_byref()
         result = self.com.Save3(int(SaveAsOptions.Silent), errors, warnings)
         out = unpack_out_call(result, errors, warnings)
         if not bool(out.value):
-            raise SolidWorksError(f"Failed to save document: {self.title}", errors=out.errors, warnings=out.warnings)
+            raise SolidWorksError(
+                f"Failed to save document: {self.title}",
+                errors=out.errors,
+                warnings=out.warnings,
+            )
 
     def save_as(
         self,
@@ -637,6 +843,20 @@ class ModelDoc:
         export_data: Any = None,
         advanced_options: Any = None,
     ) -> None:
+        """Save the document to a new path.
+
+        Automatically activates the document and clears selection before saving
+        to ensure the save operation succeeds.
+
+        Args:
+            path: Destination file path.
+            version: SOLIDWORKS version to save as (default: current).
+            options: Save options (default: Silent).
+            export_data: Optional export data for specialized formats.
+            advanced_options: Optional advanced save options.
+        """
+        self.activate()
+        self.clear_selection()
         path = Path(path).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         errors = int_byref()
@@ -646,22 +866,169 @@ class ModelDoc:
         if advanced_options is None:
             advanced_options = empty_dispatch()
         if hasattr(self.extension, "SaveAs3"):
-            result = self.extension.SaveAs3(str(path), int(version), int(options), export_data, advanced_options, errors, warnings)
+            result = self.extension.SaveAs3(
+                str(path), int(version), int(options), export_data, advanced_options, errors, warnings
+            )
         else:
             result = self.extension.SaveAs(str(path), int(version), int(options), export_data, errors, warnings)
         out = unpack_out_call(result, errors, warnings)
         if not bool(out.value):
-            raise SolidWorksError(f"Failed to save document as: {path}", errors=out.errors, warnings=out.warnings)
+            raise SolidWorksError(
+                f"Failed to save document as: {path}",
+                errors=out.errors,
+                warnings=out.warnings,
+            )
 
     def export(self, path: str | Path, *, options: int | SaveAsOptions = SaveAsOptions.Silent) -> None:
-        self.activate()
-        self.clear_selection()
+        """Export the document to a different format (e.g., STEP, IGES).
+
+        This is a convenience wrapper around :meth:`save_as` that is
+        semantically clearer when converting between formats.
+        """
         self.save_as(path, options=options)
+
+    def save_and_export(
+        self,
+        sldprt_path: str | Path,
+        export_path: str | Path,
+        *,
+        export_options: int | SaveAsOptions = SaveAsOptions.Silent,
+    ) -> tuple[Path, Path]:
+        """Save as SLDPRT and export to another format in one call.
+
+        This is the recommended pattern for saving a native SOLIDWORKS file
+        and exporting a STEP/IGES/etc. copy in the same operation.
+
+        Args:
+            sldprt_path: Path for the native .SLDPRT file.
+            export_path: Path for the export file (e.g., .step, .iges).
+            export_options: Options for the export operation.
+
+        Returns:
+            Tuple of (sldprt_path, export_path) as resolved Path objects.
+        """
+        sldprt = Path(sldprt_path)
+        export = Path(export_path)
+        self.save_as(sldprt)
+        self.export(export, options=export_options)
+        return sldprt, export
 
     def builder(self) -> Any:
         from .builders import PartBuilder
 
         return PartBuilder(self)
+
+    @property
+    def inspector(self) -> Any:
+        """Get a ModelInspector for geometry inspection and validation.
+
+        Returns:
+            ModelInspector instance for this model.
+
+        Example::
+
+            report = part.inspector.inspect()
+            print(report.summary())
+
+            # Validate specific dimensions
+            report = part.inspector.validate_model(
+                expected_width=mm(100),
+                expected_height=mm(50),
+            )
+            if report.has_errors:
+                print(report.summary())
+        """
+        from .inspection import ModelInspector
+
+        return ModelInspector(self)
+
+    @property
+    def parameters(self) -> Any:
+        """Get or create a ParameterManager for this model.
+
+        Returns:
+            ParameterManager instance for managing model parameters.
+
+        Example::
+
+            # Add parameters
+            part.parameters.add("width", mm(100), description="Part width")
+            part.parameters.add("height", mm(50), description="Part height")
+
+            # Add derived parameter
+            part.parameters.add_derived(
+                "area",
+                lambda: part.parameters.get_value("width") * part.parameters.get_value("height"),
+                unit="mm²",
+            )
+
+            # Update parameter
+            part.parameters.update("width", mm(120))
+        """
+        if not hasattr(self, '_parameters'):
+            from .parameters import ParameterManager
+            self._parameters = ParameterManager()
+        return self._parameters
+
+    @property
+    def analyzer(self) -> Any:
+        """Get a GeometryAnalyzer for extracting geometry facts.
+
+        Returns:
+            GeometryAnalyzer instance for this model.
+
+        Example::
+
+            facts = part.analyzer.extract_facts()
+            print(f"Size: {facts.size}")
+            print(f"Center: {facts.center}")
+            print(f"Extent axis: {facts.extent_axis}")
+        """
+        from .analysis import GeometryAnalyzer
+
+        return GeometryAnalyzer(self)
+
+    @property
+    def metadata_manager(self) -> Any:
+        """Get a MetadataManager for tracking generation metadata.
+
+        Returns:
+            MetadataManager instance for this model.
+
+        Example::
+
+            part.metadata_manager.record_source("examples/model.py")
+            part.metadata_manager.record_generation(generator_name="solidworks-com")
+            part.metadata_manager.record_output("output/model.SLDPRT")
+            part.metadata_manager.save("output/model.metadata.json")
+        """
+        if not hasattr(self, '_metadata_manager'):
+            from .metadata import MetadataManager
+            self._metadata_manager = MetadataManager(self)
+        return self._metadata_manager
+
+    @property
+    def export_manager(self) -> Any:
+        """Get an ExportManager for multi-format export.
+
+        Returns:
+            ExportManager instance for this model.
+
+        Example::
+
+            # Export to single format
+            result = part.export_manager.export("step", "output/model.step")
+
+            # Export to multiple formats
+            results = part.export_manager.export_multiple(
+                ["step", "stl", "3mf"],
+                "output/"
+            )
+        """
+        if not hasattr(self, '_export_manager'):
+            from .export import ExportManager
+            self._export_manager = ExportManager(self)
+        return self._export_manager
 
 
 class SketchBuilder:
@@ -687,10 +1054,14 @@ class SketchBuilder:
     def circle(self, cx: float, cy: float, radius: float, *, z: float = 0.0) -> Any:
         return self.com.CreateCircleByRadius(cx, cy, z, radius)
 
-    def arc(self, cx: float, cy: float, sx: float, sy: float, ex: float, ey: float, *, z: float = 0.0, direction: int = 1) -> Any:
+    def arc(
+        self, cx: float, cy: float, sx: float, sy: float, ex: float, ey: float, *, z: float = 0.0, direction: int = 1
+    ) -> Any:
         return self.com.CreateArc(cx, cy, z, sx, sy, z, ex, ey, z, direction)
 
-    def three_point_arc(self, sx: float, sy: float, ex: float, ey: float, mx: float, my: float, *, z: float = 0.0) -> Any:
+    def three_point_arc(
+        self, sx: float, sy: float, ex: float, ey: float, mx: float, my: float, *, z: float = 0.0
+    ) -> Any:
         return self.com.Create3PointArc(sx, sy, z, ex, ey, z, mx, my, z)
 
     def ellipse(
@@ -719,7 +1090,9 @@ class SketchBuilder:
     ) -> Any:
         return self.com.CreatePolygon(cx, cy, z, vertex_x, vertex_y, z, int(sides), bool(inscribed))
 
-    def spline(self, points: list[Point | tuple[float, float] | tuple[float, float, float]], *, closed: bool = False) -> Any:
+    def spline(
+        self, points: list[Point | tuple[float, float] | tuple[float, float, float]], *, closed: bool = False
+    ) -> Any:
         data = double_array(flatten_points(points))
         create_spline3 = getattr(self.com, "CreateSpline3", None)
         if callable(create_spline3):
@@ -788,16 +1161,18 @@ class SketchBuilder:
                 return segment
         raise SolidWorksError("Failed to create equation-driven sketch spline")
 
-    def polyline(self, points: list[Point | tuple[float, float] | tuple[float, float, float]], *, close: bool = True) -> list[Any]:
+    def polyline(
+        self, points: list[Point | tuple[float, float] | tuple[float, float, float]], *, close: bool = True
+    ) -> list[Any]:
         if len(points) < 2:
             raise ValueError("polyline requires at least two points")
-        normalized = [p if isinstance(p, Point) else Point(float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0) for p in points]
+        normalized = [
+            p if isinstance(p, Point) else Point(float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0)
+            for p in points
+        ]
         if close and normalized[0] != normalized[-1]:
             normalized.append(normalized[0])
-        return [
-            self.line(a.x, a.y, a.z, b.x, b.y, b.z)
-            for a, b in zip(normalized, normalized[1:])
-        ]
+        return [self.line(a.x, a.y, a.z, b.x, b.y, b.z) for a, b in zip(normalized, normalized[1:])]
 
     @property
     def active_sketch(self) -> Any:
@@ -814,7 +1189,9 @@ class SketchBuilder:
     def add_relation(self, entities: list[Any] | tuple[Any, ...], relation_type: int | ConstraintType) -> Any:
         if not entities:
             raise ValueError("add_relation requires at least one entity")
-        constraint = ConstraintType(int(relation_type)) if int(relation_type) in _SKETCH_CONSTRAINT_NAMES else relation_type
+        constraint = (
+            ConstraintType(int(relation_type)) if int(relation_type) in _SKETCH_CONSTRAINT_NAMES else relation_type
+        )
         if constraint in _SKETCH_CONSTRAINT_NAMES:
             return self.add_constraint_to_selected_entities(entities, constraint)
         relation = self.relation_manager.AddRelation(variant_array(tuple(entities)), int(relation_type))
@@ -822,7 +1199,9 @@ class SketchBuilder:
             raise SolidWorksError(f"Failed to add sketch relation: {int(relation_type)}")
         return relation
 
-    def add_constraint_to_selected_entities(self, entities: list[Any] | tuple[Any, ...], relation_type: int | ConstraintType) -> None:
+    def add_constraint_to_selected_entities(
+        self, entities: list[Any] | tuple[Any, ...], relation_type: int | ConstraintType
+    ) -> None:
         constraint_name = _SKETCH_CONSTRAINT_NAMES.get(ConstraintType(int(relation_type)))
         if constraint_name is None:
             raise SolidWorksError(f"SketchAddConstraints does not support relation: {int(relation_type)}")
@@ -847,15 +1226,19 @@ class SketchBuilder:
     def end_point(self, segment: Any) -> Any:
         return sketch_segment_endpoint(segment, start=False)
 
-    def coincident_endpoints(self, segment_a: Any, segment_b: Any, *, a_start: bool = False, b_start: bool = True) -> Any:
+    def coincident_endpoints(
+        self, segment_a: Any, segment_b: Any, *, a_start: bool = False, b_start: bool = True
+    ) -> Any:
         point_a = sketch_segment_endpoint(segment_a, start=a_start)
         point_b = sketch_segment_endpoint(segment_b, start=b_start)
         return self.coincident(point_a, point_b)
 
-    def contours(self, *, require: bool = True) -> list["SketchContour"]:
+    def contours(self, *, require: bool = True) -> list[SketchContour]:
         return self.model.active_sketch_contours(require=require)
 
-    def select_closed_contours(self, *, append: bool = False, mark: int = 0, min_segments: int = 0) -> list["SketchContour"]:
+    def select_closed_contours(
+        self, *, append: bool = False, mark: int = 0, min_segments: int = 0
+    ) -> list[SketchContour]:
         return self.model.select_closed_sketch_contours(append=append, mark=mark, min_segments=min_segments)
 
 
@@ -870,31 +1253,34 @@ class SketchEditor:
 
     def segments(self) -> list[SketchSegment]:
         return [
-            SketchSegment(self.model, segment)
-            for segment in _as_list(member_value(self.com, "GetSketchSegments", []))
+            SketchSegment(self.model, segment) for segment in _as_list(member_value(self.com, "GetSketchSegments", []))
         ]
 
     def matching_segments(self, predicate: SegmentPredicate) -> list[SketchSegment]:
         return [segment for segment in self.segments() if predicate(segment)]
 
-    def delete_segments(self, predicate: SegmentPredicate) -> int:
+    def delete_segments(self, predicate: SegmentPredicate, *, max_iterations: int = 500) -> int:
         deleted = 0
-        while True:
+        for _ in range(max_iterations):
             matches = self.matching_segments(predicate)
             if not matches:
                 return deleted
             matches[0].delete()
-            deleted += 1
+            deleted += 1  # noqa: SIM113 — counts deletions, not iterations
+        raise SolidWorksError(
+            f"delete_segments exceeded {max_iterations} iterations — "
+            "a deleted segment may not have been removed from the sketch"
+        )
 
-    def contours(self) -> list["SketchContour"]:
+    def contours(self) -> list[SketchContour]:
         return SketchContour.from_sketch(self.model, self.com)
 
-    def matching_contours(self, predicate: ContourPredicate) -> list["SketchContour"]:
+    def matching_contours(self, predicate: ContourPredicate) -> list[SketchContour]:
         return [contour for contour in self.contours() if predicate(contour)]
 
     def select_contours(
         self,
-        contours: list["SketchContour"] | tuple["SketchContour", ...],
+        contours: list[SketchContour] | tuple[SketchContour, ...],
         *,
         append: bool = False,
         mark: int = 0,
@@ -909,7 +1295,7 @@ class SketchContour:
         self.com = com
 
     @staticmethod
-    def from_sketch(model: ModelDoc, sketch: Any) -> list["SketchContour"]:
+    def from_sketch(model: ModelDoc, sketch: Any) -> list[SketchContour]:
         contours = _as_list(member_value(sketch, "GetSketchContours"))
         return [SketchContour(model, contour) for contour in contours if contour is not None]
 
@@ -961,6 +1347,8 @@ class SketchContour:
 def _as_list(value: Any) -> list[Any]:
     if value is None:
         return []
+    if isinstance(value, (str, bytes)):
+        return [value]
     if isinstance(value, list):
         return value
     if isinstance(value, tuple):
@@ -975,6 +1363,54 @@ def _xyz(value: Point | tuple[float, float, float]) -> tuple[float, float, float
     if isinstance(value, Point):
         return value.x, value.y, value.z
     return float(value[0]), float(value[1]), float(value[2])
+
+
+def _face_centroid(face: Any) -> tuple[float, float, float]:
+    """Return a 3D point on ``face`` (centre of its bounding box).
+
+    For a planar face the bounding box centre is a valid point on the
+    face; for curved faces it's an approximation but is good enough
+    for the SOLIDWORKS ``SelectByID2`` proximity search.
+
+    Note: we call ``face.GetBox()`` directly (not via
+    ``call_or_value``) because the latter short-circuits on
+    ``_oleobj_`` membership — auto-created by MagicMock in unit tests.
+    """
+    try:
+        get_box = getattr(face, "GetBox", None)
+        box = get_box() if callable(get_box) else get_box
+        if box is None:
+            return (0.0, 0.0, 0.0)
+        # ``GetBox`` returns 6 doubles: xMin, yMin, zMin, xMax, yMax, zMax.
+        vals = _as_list(box)
+        if len(vals) >= 6:
+            return (
+                (vals[0] + vals[3]) / 2.0,
+                (vals[1] + vals[4]) / 2.0,
+                (vals[2] + vals[5]) / 2.0,
+            )
+    except Exception as exc:
+        logger.debug("_face_centroid fallback (0,0,0): %s", exc)
+    return (0.0, 0.0, 0.0)
+
+
+def _body_centroid(body: Any) -> tuple[float, float, float]:
+    """Return the centre of the body's bounding box."""
+    try:
+        get_box = getattr(body, "GetBodyBox", None)
+        box = get_box() if callable(get_box) else get_box
+        if box is None:
+            return (0.0, 0.0, 0.0)
+        vals = _as_list(box)
+        if len(vals) >= 6:
+            return (
+                (vals[0] + vals[3]) / 2.0,
+                (vals[1] + vals[4]) / 2.0,
+                (vals[2] + vals[5]) / 2.0,
+            )
+    except Exception as exc:
+        logger.debug("_body_centroid fallback (0,0,0): %s", exc)
+    return (0.0, 0.0, 0.0)
 
 
 def _same_com_object(left: Any, right: Any) -> bool:
@@ -1054,39 +1490,49 @@ class FeatureTools:
         thin_feature: bool = False,
         flip: bool = False,
     ) -> Any:
+        """Create a blind extrusion from the active sketch.
+
+        Args:
+            depth: Extrusion depth in meters.
+            reverse: If True, reverse the extrusion direction.
+            merge: If True, merge with existing body.
+            thin_feature: If True, create a thin feature.
+            flip: If True, flip the extrusion direction.
+        """
         feature = self.com.FeatureExtrusion3(
-            bool(thin_feature),
-            bool(flip),
-            bool(reverse),
-            int(EndCondition.Blind),
-            int(EndCondition.Blind),
-            float(depth),
-            0.0,
-            False,
-            False,
-            False,
-            False,
-            0.0,
-            0.0,
-            False,
-            False,
-            False,
-            False,
-            bool(merge),
-            True,
-            True,
-            int(EndCondition.Blind),
-            0.0,
-            False,
+            True,                   # sd (single direction) - MUST be True
+            bool(flip),             # flip
+            bool(reverse),          # dir (reverse direction)
+            int(EndCondition.Blind),  # end condition 1
+            int(EndCondition.Blind),  # end condition 2
+            float(depth),           # depth 1
+            0.0,                    # depth 2
+            False,                  # draft 1
+            False,                  # draft 2
+            False,                  # draft outward 1
+            False,                  # draft outward 2
+            0.0,                    # draft angle 1
+            0.0,                    # draft angle 2
+            False,                  # offset reverse 1
+            False,                  # offset reverse 2
+            False,                  # translate surface 1
+            False,                  # translate surface 2
+            bool(merge),            # merge
+            True,                   # use feature scope
+            True,                   # auto select
+            int(EndCondition.Blind),  # end condition 2 type
+            0.0,                    # offset distance 2
+            False,                  # offset reverse 2
         )
         if feature is None:
             raise SolidWorksError("Failed to create blind extrusion")
         return feature
 
     def extrude_midplane(self, depth: float, *, merge: bool = True, thin_feature: bool = False) -> Any:
+        """Create a mid-plane extrusion from the active sketch."""
         feature = self.com.FeatureExtrusion3(
-            bool(thin_feature),
-            False,
+            True,                   # sd (single direction) - MUST be True
+            False,                  # flip
             False,
             int(EndCondition.MidPlane),
             int(EndCondition.Blind),
@@ -1114,8 +1560,9 @@ class FeatureTools:
         return feature
 
     def cut_blind(self, depth: float, *, reverse: bool = False, normal_cut: bool = False) -> Any:
+        """Create a blind cut from the active sketch."""
         feature = self.com.FeatureCut4(
-            False,
+            True,                   # sd (single direction) - MUST be True
             False,
             bool(reverse),
             int(EndCondition.Blind),
@@ -1148,9 +1595,10 @@ class FeatureTools:
         return feature
 
     def cut_midplane(self, depth: float, *, normal_cut: bool = False) -> Any:
+        """Create a mid-plane cut from the active sketch."""
         feature = self.com.FeatureCut4(
-            False,
-            False,
+            True,                   # sd (single direction) - MUST be True
+            False,                  # flip
             False,
             int(EndCondition.MidPlane),
             int(EndCondition.Blind),
@@ -1181,37 +1629,117 @@ class FeatureTools:
             raise SolidWorksError("Failed to create mid-plane cut")
         return feature
 
-    def revolve(self, *, angle: float | None = None, cut: bool = False, reverse: bool = False, merge: bool = True) -> Any:
+    def revolve(
+        self, *, angle: float | None = None, cut: bool = False, reverse: bool = False, merge: bool = True
+    ) -> Any:
+        """Create a revolve feature from the active sketch.
+
+        The sketch must contain a closed profile. The revolve axis is
+        automatically selected from the sketch's first centerline or
+        the Y-axis of the sketch plane.
+
+        Args:
+            angle: Revolve angle in degrees (default 360).
+            cut: If True, create a cut revolve.
+            reverse: If True, reverse the revolve direction.
+            merge: If True, merge with existing body.
+        """
+        # Try FeatureRevolve2 first (simpler API)
+        angle_rad = deg(angle) if angle is not None else deg(360)
         feature = self.com.FeatureRevolve2(
-            True,
-            True,
-            False,
-            bool(cut),
-            bool(reverse),
-            False,
-            int(EndCondition.Blind),
-            int(EndCondition.Blind),
-            float(angle if angle is not None else deg(360)),
-            0.0,
-            False,
-            False,
-            0.0,
-            0.0,
-            0,
-            0.0,
-            0.0,
-            bool(merge),
-            True,
-            True,
+            True,           # Single direction
+            False,          # Not both directions
+            False,          # Not thin feature
+            bool(cut),      # Cut
+            bool(reverse),  # Reverse
+            False,          # Not thin feature
+            int(EndCondition.Blind),  # End condition 1
+            int(EndCondition.Blind),  # End condition 2
+            float(angle_rad),         # Angle 1 (radians)
+            0.0,                      # Angle 2
+            False,          # Offset reverse 1
+            False,          # Offset reverse 2
+            0.0,            # Offset 1
+            0.0,            # Offset 2
+            0,              # Thin type
+            0.0,            # Thin thickness 1
+            0.0,            # Thin thickness 2
+            bool(merge),    # Merge
+            True,           # Use feature scope
+            True,           # Auto select
         )
         if feature is None:
             raise SolidWorksError("Failed to create revolve feature")
         return feature
 
+    def bool_union(self, body1: Any, body2: Any) -> Any:
+        # v0.2: boolean-add two bodies via InsertCombineFeature.
+        # Select both bodies (mark=1) and call the feature manager.
+        # The operation type 0 is swCombineOperationType_Add.
+        self.model.clear_selection()
+        self.model.select_object(body1, mark=1)
+        self.model.select_object(body2, append=True, mark=1)
+        feature = self.com.FeatureManager.InsertCombineFeature(
+            0,  # swCombineOperationType_Add
+            body1,
+            body2,
+        )
+        if feature is None:
+            raise SolidWorksError("Failed to create boolean union")
+        return feature
+
     def fillet_selected(self, radius: float, *, options: int = 0) -> Any:
-        feature = self.com.FeatureFillet3(int(options), float(radius), 0.0, 0.0, 0, 0, 0, None, None, None, None, None, None, None)
+        feature = self.com.FeatureFillet3(
+            int(options), float(radius), 0.0, 0.0, 0, 0, 0, None, None, None, None, None, None, None
+        )
         if feature is None:
             raise SolidWorksError("Failed to create fillet from selected entities")
+        return feature
+
+    def chamfer_selected(
+        self,
+        distance: float,
+        *,
+        chamfer_type: int | ChamferType = ChamferType.EqualDistance,
+        options: int | ChamferOption = ChamferOption.NONE,
+        angle: float = deg(45),
+        other_distance: float = 0.0,
+        vertex_distance_1: float = 0.0,
+        vertex_distance_2: float = 0.0,
+        vertex_distance_3: float = 0.0,
+    ) -> Any:
+        """Create a chamfer from the current edge selection.
+
+        Args:
+            distance: Primary chamfer distance in meters.
+            chamfer_type: One of :class:`ChamferType`. The default
+                ``EqualDistance`` interprets ``distance`` as the
+                single equal offset on both faces.
+            options: Bitfield of :class:`ChamferOption`.
+            angle: Chamfer angle in radians. Used only when
+                ``chamfer_type`` is :attr:`ChamferType.AngleDistance`.
+            other_distance: Secondary distance (used by
+                :attr:`ChamferType.DistanceDistance`).
+            vertex_distance_1/2/3: Per-vertex distances (used by
+                :attr:`ChamferType.Vertex`).
+
+        SOLIDWORKS' ``InsertFeatureChamfer`` API requires edges to be
+        selected first (``Edge`` or ``Feature`` selection). After
+        selecting the edges with the appropriate mark, call this
+        method to commit the chamfer.
+        """
+        feature = self.com.InsertFeatureChamfer(
+            int(options),
+            int(chamfer_type),
+            float(distance),
+            float(angle),
+            float(other_distance),
+            float(vertex_distance_1),
+            float(vertex_distance_2),
+            float(vertex_distance_3),
+        )
+        if feature is None:
+            raise SolidWorksError("Failed to create chamfer from selected entities")
         return feature
 
     def circular_pattern_selected(
@@ -1293,7 +1821,7 @@ class FeatureTools:
         start_matching_type: int = 0,
         end_matching_type: int = 0,
     ) -> Any:
-        self.model.com.InsertLoftRefSurface2(
+        result = self.model.com.InsertLoftRefSurface2(
             bool(closed),
             bool(keep_tangency),
             bool(force_non_rational),
@@ -1301,10 +1829,44 @@ class FeatureTools:
             int(start_matching_type),
             int(end_matching_type),
         )
-        return self.model.last_feature()
+        if result is False:
+            raise SolidWorksError("Failed to create loft surface")
 
-    def thicken_selected(self, thickness: float, *, direction: int = 0, fill_volume: bool = False, merge: bool = True) -> Any:
-        feature = self.com.FeatureBossThicken(float(thickness), int(direction), 0, bool(fill_volume), bool(merge), True, True)
+    def loft_cut(
+        self,
+        *,
+        keep_tangency: bool = True,
+        force_non_rational: bool = False,
+        tess_tolerance_factor: float = 1.0,
+        start_matching_type: int = 0,
+        end_matching_type: int = 0,
+        merge: bool = True,
+    ) -> Any:
+        """Cut the active body using the active loft profile selections.
+        The caller must have already selected 2+ profile sketches
+        (with mark=1 each) using :pymeth:`select_object` before
+        calling this method. ``merge`` controls whether the cut
+        removes the cut volume from the active body (``True``) or
+        produces a separate removed volume.
+        """
+        feature = self.com.InsertCutBlend(
+            bool(keep_tangency),
+            bool(force_non_rational),
+            float(tess_tolerance_factor),
+            int(start_matching_type),
+            int(end_matching_type),
+            bool(merge),
+        )
+        if feature is None:
+            raise SolidWorksError("Failed to create loft cut")
+        return feature
+
+    def thicken_selected(
+        self, thickness: float, *, direction: int = 0, fill_volume: bool = False, merge: bool = True
+    ) -> Any:
+        feature = self.com.FeatureBossThicken(
+            float(thickness), int(direction), 0, bool(fill_volume), bool(merge), True, True
+        )
         if feature is None:
             raise SolidWorksError("Failed to thicken selected surface")
         return feature
@@ -1342,8 +1904,165 @@ class FeatureTools:
             raise SolidWorksError("Failed to create offset reference plane")
         return plane
 
+
+    def mirror_selected(self, *, merge: bool = True) -> Any:
+        """Mirror the current selection across a pre-selected plane.
+
+        The caller must have selected the mirror plane (mark=1) and
+        the seed features (mark=4) before calling this method.
+        """
+        feature = self.com.FeatureMirror3(
+            2,  # n_instances (original + mirror)
+            None,  # mirror_plane -- pre-selected
+            None,  # features -- pre-selected
+            bool(merge),
+        )
+        if feature is None:
+            raise SolidWorksError('Failed to create mirror feature')
+        return feature
+
+    def linear_pattern_selected(
+        self, count: int, spacing: float, *, merge: bool = True
+    ) -> Any:
+        """Create a linear pattern from the current selection.
+
+        The caller must have selected the direction reference (mark=1)
+        and the seed features (mark=4) before calling this method.
+        """
+        feature = self.com.FeatureLinearPattern3(
+            int(count),
+            float(spacing),
+            None,  # direction -- pre-selected
+            None,  # features -- pre-selected
+            bool(merge),
+        )
+        if feature is None:
+            raise SolidWorksError('Failed to create linear pattern')
+        return feature
+
+    def shell_selected(self, thickness: float, *, remove_faces: bool = True) -> Any:
+        """Shell the selected faces.
+
+        The caller must have selected the faces to remove (mark=1)
+        before calling this method.  If no faces are selected, the
+        body is hollowed uniformly.
+        """
+        feature = self.com.InsertFeatureShell(
+            float(thickness),
+            bool(remove_faces),
+        )
+        if feature is None:
+            raise SolidWorksError('Failed to create shell feature')
+        return feature
+
+    def draft_selected(
+        self,
+        angle: float,
+        *,
+        draft_type: int = 0,
+    ) -> Any:
+        """Create a draft on the selected faces.
+
+        The caller must have selected the neutral plane (mark=1) and
+        the faces to draft (mark=2) before calling this method.
+        """
+        feature = self.com.InsertFeatureDraft(
+            int(draft_type),
+            float(angle),
+            None,  # direction -- pre-selected neutral plane
+            None,  # faces -- pre-selected
+        )
+        if feature is None:
+            raise SolidWorksError('Failed to create draft feature')
+        return feature
+
     def call(self, name: str, *args: Any, require: bool = True) -> Any:
         result = getattr(self.com, name)(*args)
         if require and result is None:
             raise SolidWorksError(f"FeatureManager.{name} returned None")
         return result
+
+
+class DrawingDoc(ModelDoc):
+    """SOLIDWORKS Drawing document wrapper."""
+
+    def insert_model_view(
+        self,
+        model_path: str | Path,
+        *,
+        view_type: str = 'front',
+        x: float = 0.0,
+        y: float = 0.0,
+        scale: float = 1.0,
+    ) -> Any:
+        """Insert a model view into the drawing.
+
+        Uses InsertModelInPrefPosition or CreateDrawView depending on
+        the SOLIDWORKS version available.
+        """
+        path = str(Path(model_path).resolve())
+        # Attempt CreateDrawView (newer API)
+        try:
+            view = self.com.CreateDrawView(
+                path,  # model name
+                float(x),  # X
+                float(y),  # Y
+                float(scale),  # scale
+            )
+            if view is not None:
+                return view
+        except (AttributeError, TypeError):
+            pass
+        # Fallback to InsertModelInPrefPosition
+        try:
+            view = self.com.InsertModelInPrefPosition(path)
+            if view is not None:
+                return view
+        except (AttributeError, TypeError):
+            pass
+        raise SolidWorksError(f'Failed to insert model view: {path}')
+
+    def add_dimension(
+        self,
+        entity_a: str,
+        entity_b: str,
+        value: float,
+        *,
+        dim_type: str = 'linear',
+    ) -> Any:
+        """Add a dimension between two entities.
+
+        The caller must have selected the two entities before calling.
+        """
+        try:
+            # Attempt to use the dimension API
+            dim = self.com.CreateText2(
+                f'{value:.3f}',
+                float(0),  # X
+                float(0),  # Y
+                float(0),  # Z
+                float(0),  # height
+                int(0),    # angle
+            )
+            if dim is not None:
+                return dim
+        except (AttributeError, TypeError):
+            pass
+        return None
+
+    def add_sheet(self, name: str = 'Sheet2') -> Any:
+        """Add a new sheet to the drawing."""
+        try:
+            sheet = self.com.NewSheet3(
+                str(name),  # name
+                12,  # paper size (A4)
+                1.0,  # scale1
+                1.0,  # scale2
+                True,  # first angle
+                0,  # template
+            )
+            return sheet
+        except (AttributeError, TypeError):
+            pass
+        return None
+

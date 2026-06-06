@@ -1,0 +1,49 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "hex_spacer"
+  },
+  "coordinate_system": {
+    "origin": "part_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "hex_radius": 12.0,
+    "spacer_height": 5.0,
+    "corner_chamfer": 0.5
+  },
+  "features": [
+    {
+      "id": "hex_body",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {
+            "type": "polygon",
+            "center": [0, 0],
+            "radius": "hex_radius",
+            "sides": 6
+          }
+        ]
+      },
+      "depth": "spacer_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "hex_chamfer",
+      "type": "chamfer",
+      "target": "hex_body",
+      "size": "corner_chamfer",
+      "selector": {"kind": "all_edges"}
+    }
+  ],
+  "acceptance": {
+    "bbox": [24, 24, 5],
+    "must_have": ["single_solid", "hex_profile"],
+    "tolerance_mm": 0.05
+  }
+}

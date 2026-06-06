@@ -8,6 +8,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from model_meshing_gears import SpurGearSpec, draw_slot_profile
+
 from solidworks_com import SolidWorks
 
 

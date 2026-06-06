@@ -1,0 +1,82 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "mounting_plate"
+  },
+  "coordinate_system": {
+    "origin": "part_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "plate_length": 100.0,
+    "plate_width": 60.0,
+    "plate_thickness": 10.0,
+    "hole_diameter": 6.0,
+    "hole_fl_x": -40.0,
+    "hole_fl_y": -20.0,
+    "hole_fr_x": 40.0,
+    "hole_fr_y": -20.0,
+    "hole_bl_x": -40.0,
+    "hole_bl_y": 20.0,
+    "hole_br_x": 40.0,
+    "hole_br_y": 20.0
+  },
+  "features": [
+    {
+      "id": "base_plate",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {
+            "type": "center_rectangle",
+            "center": [0, 0],
+            "size": ["plate_length", "plate_width"]
+          }
+        ]
+      },
+      "depth": "plate_thickness",
+      "direction": "+Z"
+    },
+    {
+      "id": "corner_hole_fl",
+      "type": "hole_through",
+      "target": "base_plate",
+      "diameter": "hole_diameter",
+      "axis": "Z",
+      "position": ["hole_fl_x", "hole_fl_y"]
+    },
+    {
+      "id": "corner_hole_fr",
+      "type": "hole_through",
+      "target": "base_plate",
+      "diameter": "hole_diameter",
+      "axis": "Z",
+      "position": ["hole_fr_x", "hole_fr_y"]
+    },
+    {
+      "id": "corner_hole_bl",
+      "type": "hole_through",
+      "target": "base_plate",
+      "diameter": "hole_diameter",
+      "axis": "Z",
+      "position": ["hole_bl_x", "hole_bl_y"]
+    },
+    {
+      "id": "corner_hole_br",
+      "type": "hole_through",
+      "target": "base_plate",
+      "diameter": "hole_diameter",
+      "axis": "Z",
+      "position": ["hole_br_x", "hole_br_y"]
+    }
+  ],
+  "acceptance": {
+    "bbox": [100, 60, 10],
+    "must_have": ["single_solid", "4_through_holes"],
+    "tolerance_mm": 0.05
+  }
+}

@@ -20,11 +20,23 @@ class Component:
     def select(self, append: bool = False, mark: int = 0) -> bool:
         return bool(call_member(self.com, "Select4", bool(append), None, int(mark), default=False))
 
+    def __repr__(self) -> str:
+        try:
+            return f"Component(name={self.name!r})"
+        except Exception:
+            return "Component(<unreadable>)"
+
 
 class AssemblyDoc(ModelDoc):
     @property
     def assembly(self) -> Any:
         return self.com
+
+    def __repr__(self) -> str:
+        try:
+            return f"AssemblyDoc(title={self.title!r})"
+        except Exception:
+            return "AssemblyDoc(<unreadable>)"
 
     def add_component(
         self,

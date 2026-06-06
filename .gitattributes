@@ -1,0 +1,3 @@
+# Force POSIX line endings on shell scripts and Python sources.
+*.sh             text eol=lf
+*.py             text eol=lf

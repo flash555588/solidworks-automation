@@ -21,6 +21,7 @@ dist/
 
 # Generated SOLIDWORKS / CAD output
 output/
+examples/e2e_output/
 *.SLDPRT
 *.SLDASM
 *.SLDDRW

@@ -149,8 +149,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Create an equation-driven involute curve test part in SOLIDWORKS.")
     parser.add_argument("--output-dir", type=Path, default=Path("output") / "gears")
     parser.add_argument("--hidden", action="store_true", help="Run SOLIDWORKS without making the window visible.")
-    parser.add_argument("--reference-circles", action="store_true", help="Also draw root, base, pitch, and outside circles.")
-    parser.add_argument("--tooth-outline", action="store_true", help="Also draw root/tip arcs and root connection lines.")
+    parser.add_argument(
+        "--reference-circles", action="store_true", help="Also draw root, base, pitch, and outside circles."
+    )
+    parser.add_argument(
+        "--tooth-outline", action="store_true", help="Also draw root/tip arcs and root connection lines."
+    )
     args = parser.parse_args()
 
     path = build_equation_involute_test(

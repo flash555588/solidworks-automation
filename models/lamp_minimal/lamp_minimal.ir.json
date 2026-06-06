@@ -1,0 +1,97 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "lamp_minimal"
+  },
+  "coordinate_system": {
+    "origin": "base_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "base_height": 15.0,
+    "stem_height": 350.0,
+    "shade_segment_height": 30.0,
+    "base_radius": 60.0,
+    "stem_radius": 9.0,
+    "shade_top_radius": 15.0,
+    "shade_mid_radius": 30.0,
+    "shade_bot_radius": 50.0,
+    "shade_top_z": 365.0,
+    "shade_mid_z": 395.0,
+    "shade_bot_z": 425.0
+  },
+  "features": [
+    {
+      "id": "base_disk",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "base_radius"}
+        ]
+      },
+      "depth": "base_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "stem",
+      "type": "extrude_add",
+      "z_offset": "base_height",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "stem_radius"}
+        ]
+      },
+      "depth": "stem_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "shade_top",
+      "type": "extrude_add",
+      "z_offset": "shade_top_z",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "shade_top_radius"}
+        ]
+      },
+      "depth": "shade_segment_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "shade_mid",
+      "type": "extrude_add",
+      "z_offset": "shade_mid_z",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "shade_mid_radius"}
+        ]
+      },
+      "depth": "shade_segment_height",
+      "direction": "+Z"
+    },
+    {
+      "id": "shade_bot",
+      "type": "extrude_add",
+      "z_offset": "shade_bot_z",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "shade_bot_radius"}
+        ]
+      },
+      "depth": "shade_segment_height",
+      "direction": "+Z"
+    }
+  ],
+  "acceptance": {
+    "bbox": [120, 120, 460],
+    "must_have": ["single_solid"],
+    "tolerance_mm": 1.0
+  }
+}

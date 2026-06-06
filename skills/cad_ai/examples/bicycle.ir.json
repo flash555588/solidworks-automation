@@ -1,0 +1,196 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "bicycle"
+  },
+  "coordinate_system": {
+    "origin": "part_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "wheel_radius": 220.0,
+    "wheel_thickness": 18.0,
+    "wheel_inner_radius": 195.0,
+    "frame_tube_radius": 9.0,
+    "bb_drop_z": 75.0,
+    "head_top_x": 200.0,
+    "head_top_z": 280.0,
+    "rear_axle_x": -230.0,
+    "rear_axle_z": 220.0,
+    "stem_length": 70.0,
+    "handlebar_radius": 110.0,
+    "handlebar_thickness": 8.0,
+    "saddle_length": 130.0,
+    "saddle_thickness": 12.0,
+    "chainring_radius": 50.0,
+    "chainring_thickness": 5.0
+  },
+  "features": [
+    {
+      "id": "front_wheel_outer",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["head_top_x", 0], "diameter": "wheel_radius"}
+        ]
+      },
+      "depth": "wheel_thickness",
+      "direction": "+Y"
+    },
+    {
+      "id": "front_wheel_inner",
+      "type": "extrude_cut",
+      "target": "front_wheel_outer",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["head_top_x", 0], "diameter": "wheel_inner_radius"}
+        ]
+      },
+      "depth": "wheel_thickness",
+      "direction": "+Y"
+    },
+    {
+      "id": "rear_wheel_outer",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["rear_axle_x", 0], "diameter": "wheel_radius"}
+        ]
+      },
+      "depth": "wheel_thickness",
+      "direction": "+Y"
+    },
+    {
+      "id": "rear_wheel_inner",
+      "type": "extrude_cut",
+      "target": "rear_wheel_outer",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["rear_axle_x", 0], "diameter": "wheel_inner_radius"}
+        ]
+      },
+      "depth": "wheel_thickness",
+      "direction": "+Y"
+    },
+    {
+      "id": "down_tube",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": [0, "bb_drop_z"], "diameter": "frame_tube_radius"}
+        ]
+      },
+      "depth": 200.0,
+      "direction": "+X"
+    },
+    {
+      "id": "seat_tube",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": [0, "bb_drop_z"], "diameter": "frame_tube_radius"}
+        ]
+      },
+      "depth": 245.0,
+      "direction": "+Z"
+    },
+    {
+      "id": "chainstay_left",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["rear_axle_x", 0], "diameter": "frame_tube_radius"}
+        ]
+      },
+      "depth": 230.0,
+      "direction": "+X"
+    },
+    {
+      "id": "seatstay",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["rear_axle_x", "rear_axle_z"], "diameter": "frame_tube_radius"}
+        ]
+      },
+      "depth": 230.0,
+      "direction": "+X"
+    },
+    {
+      "id": "head_tube",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "frame_tube_radius"}
+        ]
+      },
+      "depth": "head_top_z",
+      "direction": "+Z"
+    },
+    {
+      "id": "stem",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XZ",
+        "entities": [
+          {"type": "circle", "center": ["head_top_x", 0], "diameter": "frame_tube_radius"}
+        ]
+      },
+      "depth": "stem_length",
+      "direction": "+Z"
+    },
+    {
+      "id": "handlebar",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "handlebar_radius"}
+        ]
+      },
+      "depth": "handlebar_thickness",
+      "direction": "+Z"
+    },
+    {
+      "id": "saddle",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "saddle_length"}
+        ]
+      },
+      "depth": "saddle_thickness",
+      "direction": "+Z"
+    },
+    {
+      "id": "chainring",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {"type": "circle", "center": [0, 0], "diameter": "chainring_radius"}
+        ]
+      },
+      "depth": "chainring_thickness",
+      "direction": "+Z"
+    }
+  ],
+  "acceptance": {
+    "bbox": [430, 200, 350],
+    "must_have": ["wheels", "frame", "saddle", "handlebar", "chainring"],
+    "tolerance_mm": 1.0
+  }
+}

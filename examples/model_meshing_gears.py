@@ -140,7 +140,9 @@ def flank_points(
     return points
 
 
-def transformed(points: list[tuple[float, float]], center: tuple[float, float], rotation: float) -> list[tuple[float, float]]:
+def transformed(
+    points: list[tuple[float, float]], center: tuple[float, float], rotation: float
+) -> list[tuple[float, float]]:
     result: list[tuple[float, float]] = []
     for point in points:
         x, y = rotate(point, rotation)
@@ -148,7 +150,9 @@ def transformed(points: list[tuple[float, float]], center: tuple[float, float], 
     return result
 
 
-def append_points(target: list[tuple[float, float]], points: list[tuple[float, float]], *, tolerance: float = 1e-9) -> None:
+def append_points(
+    target: list[tuple[float, float]], points: list[tuple[float, float]], *, tolerance: float = 1e-9
+) -> None:
     for point in points:
         if target and math.dist(target[-1], point) <= tolerance:
             continue
@@ -340,7 +344,9 @@ def draw_center_arc(
     return sk.arc(center[0], center[1], start[0], start[1], end[0], end[1], direction=direction)
 
 
-def involute_equation_expressions(base_radius: float, rotation: float, *, mirror: bool = False, parameter: str = "t") -> tuple[str, str]:
+def involute_equation_expressions(
+    base_radius: float, rotation: float, *, mirror: bool = False, parameter: str = "t"
+) -> tuple[str, str]:
     rb = expression_mm(base_radius)
     c = expression(math.cos(rotation))
     s = expression(math.sin(rotation))
@@ -372,15 +378,17 @@ def draw_slot_profile(sk, spec: SpurGearSpec, tooth: int, *, rotation: float = 0
 
     segments: list[object] = []
     segments.extend(sk.polyline([right_tip_outer, right_tip_cutter], close=False))
-    segments.append(draw_center_arc(
-        sk,
-        spec.cutter_outer_radius,
-        right_tip_angle + tooth_angle,
-        left_tip_angle + next_tooth_angle,
-        (0.0, 0.0),
-        rotation,
-        direction=1,
-    ))
+    segments.append(
+        draw_center_arc(
+            sk,
+            spec.cutter_outer_radius,
+            right_tip_angle + tooth_angle,
+            left_tip_angle + next_tooth_angle,
+            (0.0, 0.0),
+            rotation,
+            direction=1,
+        )
+    )
     segments.extend(sk.polyline([left_tip_cutter, left_tip_outer], close=False))
 
     base_to_outer_t = math.sqrt((spec.outer_radius / spec.base_radius) ** 2 - 1.0)
@@ -390,7 +398,9 @@ def draw_slot_profile(sk, spec: SpurGearSpec, tooth: int, *, rotation: float = 0
         left_base_angle + next_tooth_angle + rotation,
         parameter=f"({t_max})-t",
     )
-    right_x, right_y = involute_equation_expressions(spec.base_radius, right_base_angle + tooth_angle + rotation, mirror=True)
+    right_x, right_y = involute_equation_expressions(
+        spec.base_radius, right_base_angle + tooth_angle + rotation, mirror=True
+    )
 
     left_flank = sk.equation_spline(
         left_x,

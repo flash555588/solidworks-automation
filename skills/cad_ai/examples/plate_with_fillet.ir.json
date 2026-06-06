@@ -1,0 +1,49 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "plate_with_fillet"
+  },
+  "coordinate_system": {
+    "origin": "part_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "plate_length": 60.0,
+    "plate_width": 40.0,
+    "plate_thickness": 8.0,
+    "top_fillet_radius": 2.0
+  },
+  "features": [
+    {
+      "id": "base_plate",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {
+            "type": "center_rectangle",
+            "center": [0, 0],
+            "size": ["plate_length", "plate_width"]
+          }
+        ]
+      },
+      "depth": "plate_thickness",
+      "direction": "+Z"
+    },
+    {
+      "id": "top_outer_fillet",
+      "type": "fillet",
+      "target": "base_plate",
+      "radius": "top_fillet_radius",
+      "selector": {"kind": "top_outer_edges"}
+    }
+  ],
+  "acceptance": {
+    "bbox": [60, 40, 8],
+    "must_have": ["single_solid"],
+    "tolerance_mm": 0.05
+  }
+}

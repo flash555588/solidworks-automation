@@ -102,6 +102,25 @@ class EndCondition(IntEnum):
     UpToBody = 7
 
 
+class ChamferType(IntEnum):
+    """swChamferType_e -- selects the kind of chamfer geometry."""
+
+    AngleDistance = 1  # swChamferAngleDistance: distance + angle
+    DistanceDistance = 2  # swChamferDistanceDistance: two distances
+    Vertex = 3  # swChamferVertex: vertex chamfer with three distances
+    EqualDistance = 16  # swChamferEqualDistance: single equal distance
+
+
+class ChamferOption(IntFlag):
+    """swFeatureChamferOption_e -- bitfield of chamfer feature options."""
+
+    NONE = 0
+    FlipDirection = 1  # swFeatureChamferFlipDirection
+    KeepFeature = 2  # swFeatureChamferKeepFeature
+    TangentPropagation = 4  # swFeatureChamferTangentPropagation
+    PropagateFeatToParts = 8  # swFeatureChamferPropagateFeatToParts
+
+
 class ConstraintType(IntEnum):
     Distance = 1
     Angle = 2

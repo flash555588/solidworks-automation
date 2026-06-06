@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "solidworks-com"
-version = "0.1.0"
+version = "0.9.0"
 description = "Ergonomic Python wrappers for the SOLIDWORKS COM API."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -13,7 +13,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -22,6 +21,41 @@ dependencies = [
     "pywin32>=306; platform_system == 'Windows'",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "ruff>=0.5",
+]
+docs = [
+    "beautifulsoup4>=4.9",
+    "markdownify>=0.11",
+    "lxml>=4.6",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["solidworks_com*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+# Pragmatic baseline. Many silent excepts exist in com.py for SOLI DWORKS
+# version drift and are intentional — opt out of BLE001 wholesale.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",  # line length is handled by the formatter
+    "B008",  # function-call-in-default-argument is intentional for descriptors
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]  # scripts can defer imports until after sys.path tweaks
+

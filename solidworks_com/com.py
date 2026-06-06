@@ -3,16 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+_pythoncom: Any = None
+_win32com_client: Any = None
+
 
 def import_pywin32() -> tuple[Any, Any]:
-    try:
-        import pythoncom  # type: ignore
-        import win32com.client  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "solidworks-com requires pywin32 on Windows. Install with: pip install pywin32"
-        ) from exc
-    return pythoncom, win32com.client
+    """Return (pythoncom, win32com.client), importing and caching on first call."""
+    global _pythoncom, _win32com_client
+    if _pythoncom is None or _win32com_client is None:
+        try:
+            import pythoncom  # type: ignore
+            import win32com.client  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError("solidworks-com requires pywin32 on Windows. Install with: pip install pywin32") from exc
+        _pythoncom = pythoncom
+        _win32com_client = win32com.client
+    return _pythoncom, _win32com_client
 
 
 def int_byref() -> Any:

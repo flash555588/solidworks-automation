@@ -1,0 +1,81 @@
+{
+  "schema": "cad_ir.v0",
+  "units": "mm",
+  "document": {
+    "type": "part",
+    "name": "flange_with_pattern"
+  },
+  "coordinate_system": {
+    "origin": "part_center",
+    "up_axis": "Z",
+    "front_axis": "Y"
+  },
+  "parameters": {
+    "outer_radius": 50.0,
+    "inner_radius": 25.0,
+    "flange_thickness": 6.0,
+    "bolt_circle_radius": 35.0,
+    "bolt_diameter": 5.0,
+    "edge_chamfer": 1.0
+  },
+  "features": [
+    {
+      "id": "flange_blank",
+      "type": "extrude_add",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {
+            "type": "circle",
+            "center": [0, 0],
+            "diameter": "outer_radius"
+          }
+        ]
+      },
+      "depth": "flange_thickness",
+      "direction": "+Z"
+    },
+    {
+      "id": "central_bore",
+      "type": "hole_through",
+      "target": "flange_blank",
+      "diameter": "inner_radius",
+      "axis": "Z",
+      "position": [0, 0]
+    },
+    {
+      "id": "bolt_circle",
+      "type": "extrude_cut",
+      "target": "flange_blank",
+      "sketch": {
+        "plane": "XY",
+        "entities": [
+          {
+            "type": "circle_pattern",
+            "centers": [
+              ["bolt_circle_radius", 0],
+              [0, "bolt_circle_radius"],
+              [-35, 0],
+              [0, -35]
+            ],
+            "diameter": "bolt_diameter"
+          }
+        ]
+      },
+      "depth": "flange_thickness",
+      "direction": "+Z"
+    },
+    {
+      "id": "edge_chamfer",
+      "type": "chamfer",
+      "target": "flange_blank",
+      "size": "edge_chamfer",
+      "selector": {"kind": "top_outer_edges"}
+    }
+  ],
+  "acceptance": {
+    "bbox": [50, 50, 6],
+    "must_have": ["single_solid", "central_bore", "4_mount_holes", "edge_chamfer"],
+    "tolerance_mm": 0.05
+  }
+}
